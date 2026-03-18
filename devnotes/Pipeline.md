@@ -2,6 +2,8 @@
 
 **Core architecture:** YAML DSL → Python orchestrator → ElevenLabs TTS → Remotion/Kdenlive compositions → rendered video
 
+---
+
 ## YAML DSL (The Script Format)
 
 The DSL is the foundation everything else builds on. Every version of the pipeline reads from this format.
@@ -35,7 +37,7 @@ s:
 
   - t: "CHAPTER 2" 3s {title_card}
 
-  # Natural language edit block — describe the edit in natural language, LLM interprets and turn into Remotion code
+  # Natural language edit block — describe the edit in natural language, LLM interprets and turns into Remotion code
   - n: He grew up surrounded by concrete and noise.
   - e: >
       slow pan across a grainy photo of a neighborhood.
@@ -57,7 +59,7 @@ s:
 
   - n: Three different sources. All saying the same thing.
   - e: >
-      split screen — three panels left to right, staggered 0.3s, the one on the left comes from the bottom, the one of the right comes from the top.
+      split screen — three panels left to right, staggered 0.3s, the one on the left comes from the bottom, the one on the right comes from the top.
       clean white dividers.
     +:
       - source1.png
@@ -91,6 +93,7 @@ The preprocessor (`expand.py`) converts shorthand into this format. The rest of 
 meta:
   title: "Video Title Here"
   voice_id: "elevenlabs_voice_id"
+  char_lim: 5000
   fps: 30
   resolution: [1920, 1080]
   assets_dir: "assets/"  # prepended to all relative paths
@@ -155,7 +158,7 @@ script:
 
 ## Version 1 — Generate & Assemble (MVP)
 
-**What it does:** Parses YAML, generates all narration, generates subtitle files, generate custom edits made with Remotion, writes a Kdenlive project file with everything loaded on tracks. You arrange manually.
+**What it does:** Parses YAML, generates all narration, generates subtitle files, generates custom edits made with Remotion, writes a Kdenlive project file with everything loaded on tracks. You arrange manually.
 
 **What it solves:** Eliminates the TTS generation grind and the blank-timeline-start problem. You open Kdenlive and everything is there waiting to be arranged.
 
@@ -198,9 +201,27 @@ script.yaml
 
 ### Key notes
 - **ElevenLabs char limit:** Split narration at YAML entry boundaries. If a single narration entry exceeds char_lim (by default 5000), split at sentence boundaries.
-- **MLT XML structure:** Producers (media files) → Playlists (tracks) → Tractor (multitrack composition). Clips have `in`/`out` in frame numbers = timestamp × fps.
 
-## Version 2 — Automated Sync via ElevenLabs timestamps 
+### Kdenlive integration: two approaches
+
+**Option A — OpenTimelineIO (OTIO)**
+- Python API for building timelines: `Track`, `Clip`, `Transition` objects instead of raw XML.
+- `pip install opentimelineio` + the Kdenlive adapter (`pip install otio-kdenlive-adapter`).
+- Cleaner code — no manual producer ID management or XML nesting.
+- Future-proofs the project: OTIO also exports to DaVinci Resolve, Final Cut Pro XML, AAF, EDL, etc. Swap editors without rewriting timeline generation.
+- **Caveat:** The Kdenlive adapter is noted as unstable and lagging behind Kdenlive's newer features. For basic clip/audio placement this is fine. For Kdenlive-specific filter chains, it won't help — but that's what Remotion handles anyway.
+- **Caveat:** OTIO handles cut structure (placement, ordering, durations, basic transitions), not effects. Complex effects stay in the Remotion layer.
+
+**Option B — Raw MLT XML**
+- Direct control over everything Kdenlive supports, including all effects and filter chains.
+- MLT XML structure: Producers (media files) → Playlists (tracks) → Tractor (multitrack composition). Clips have `in`/`out` in frame numbers = timestamp × fps.
+- More brittle — IDs must be internally consistent, schema can shift between Kdenlive versions. Silent failures when something is off.
+- Best approach: export a test project from Kdenlive manually and use that XML as your structural template.
+- Better for the experimental Kdenlive effects generation path where the LLM writes filter/transition nodes directly.
+
+---
+
+## Version 2 — Automated Sync via ElevenLabs Timestamps
 
 **What it adds:** Uses ElevenLabs' `/stream/with-timestamps` endpoint to get character-level timing data. Media cues from the YAML are synced to specific words/phrases in the narration automatically.
 
@@ -230,7 +251,7 @@ script.yaml
 
 ---
 
-## Version 3 — LLM-Generated Remotion/Kdenlive compositions
+## Version 3 — LLM-Generated Remotion/Kdenlive Compositions
 
 **What it adds:** Effect/transition descriptions from YAML are sent to an LLM (Claude API) which generates Remotion component code. Those render as video clips that get placed on the timeline.
 
@@ -253,8 +274,10 @@ script.yaml
 ```
 
 ### Notes
-- **LLM reliability:** Generated Remotion code might sometime break. Keep a cache of known-good compositions for common effects (carpet transition, glitch, fade, etc.) and only hit the LLM for novel descriptions.
+- **LLM reliability:** Generated Remotion code might sometimes break. Keep a cache of known-good compositions for common effects (carpet transition, glitch, fade, etc.) and only hit the LLM for novel descriptions.
 - **Effect library over time:** As you accumulate working compositions, you build a personal library. The LLM becomes a fallback for new effects, not the primary path.
+
+---
 
 ## Version 4 — MPV Interactive Preview & Re-prompting
 
@@ -282,11 +305,11 @@ Python orchestrator
     │         read new description from stdin
     │         regenerate Remotion clip via LLM
     │         hot-swap in timeline
-
     │
     │     if fill:
     │         read media path or effect description
     │         generate and insert
+    │
     │     if code:
     │         let the user rewrite the corresponding lines from the .jsx
     │
@@ -298,19 +321,27 @@ Python orchestrator
 ---
 
 ## Dependencies
-### Python :
-pyyaml elevenlabs requests
-(?) lxml
-anthropic API
-### Software :
-kdenlive
-mpv 
-ffmpeg / ffprobe
-### Webshit :
-remotion / node.js
+
+### Python
+- pyyaml
+- elevenlabs
+- requests
+- anthropic
+- opentimelineio (+ otio-kdenlive-adapter)
+- (?) lxml (only if using raw MLT XML path)
+
+### Software
+- Kdenlive
+- MPV
+- FFmpeg / FFprobe
+
+### Webshit
+- Remotion
+- Node.js
 
 ---
 
-## More tentative features :
-- Use a video/clip example as inspiration for the effect you want to generate, instead of just natural language 
-- Dynamically integrate media as links(e.g from youtube, soundcloud, etc...) instead of relying putting raw files from hard drive.
+## Tentative Future Features
+
+- **Visual reference for effects:** Use a video/clip example as inspiration for the effect you want to generate, instead of just natural language description.
+- **Dynamic media integration:** Pull media from URLs (YouTube, SoundCloud, etc.) instead of relying on raw files from hard drive.
