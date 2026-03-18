@@ -1,0 +1,21 @@
+#Simple test for narration and video clips. No effects.
+meta:
+  title: "Test Video"
+  #Kwame's voice ID I usually use
+  voice: "4vmnufGCy8vbBupy65bg"
+  #char_lim for ElevenLabs
+  char_lim: 5000
+  fps: 30
+  res: [1920, 1080]
+
+s:
+  - n: This is the first line of narration. Just a simple test.
+  - n: Now we cut to a clip.
+  - v: assets/sample.mp4 [0:05-0:12]
+
+  - n: And here is an image with a transition.
+  - i: assets/before.png -> assets/after.png
+
+  - _: 2
+
+  - t: That was the test
