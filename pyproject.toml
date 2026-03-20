@@ -9,10 +9,11 @@ dependencies = [
     "requests",
     "anthropic",
     "opentimelineio",
+    "harnessgg-kdenlive"
 ]
 
 [project.scripts]
-dettadon = "src.main:main"
+videvidevideo = "src.main:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]
