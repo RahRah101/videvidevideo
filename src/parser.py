@@ -11,12 +11,12 @@ def expand(script):
     for entry in entries:
         expanded_entries.extend(expand_entry(entry))
 
-    return
+    return {"meta": meta, "script": expanded_entries}
 
 #expand the metadata 
 def expand_meta(meta):
     return {
-        "title": meta.get("title")
+        "title": meta.get("title"),
         "voice_id": meta.get("voice", ""),
         "char_lim": meta.get("char_lim", 5000),
         "fps": meta.get("fps", 30),
