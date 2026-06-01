@@ -1,1 +1,11 @@
 edit.kdenlive
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+src/videvidevideo.egg-info/
