@@ -10,6 +10,6 @@ done
 pip install -e .
 
 # Remotion
-cd remotion && npm install
+# cd remotion && npm install
 
-echo "Ready. Run: videvide script.yaml"
+echo "Ready. Run: vvv script.yaml"

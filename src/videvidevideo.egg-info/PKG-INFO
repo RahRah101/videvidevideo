@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: videvidevideo
+Version: 0.1.0
+Summary: CLI-native long-form video production pipeline
+Requires-Python: >=3.10
+Requires-Dist: pyyaml
+Requires-Dist: elevenlabs
+Requires-Dist: requests
+Requires-Dist: anthropic
+Requires-Dist: opentimelineio
