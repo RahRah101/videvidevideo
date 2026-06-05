@@ -1,5 +1,0 @@
-pyyaml
-elevenlabs
-requests
-anthropic
-opentimelineio
