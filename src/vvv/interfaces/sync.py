@@ -12,4 +12,4 @@ class SyncProvider(ABC):
         entries: list[ResolvedEntry],
         ctx: Context,
     ) -> list[TimedEntry]:
-        #TODO: Implement this
+        ...

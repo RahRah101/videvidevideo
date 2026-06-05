@@ -14,8 +14,8 @@ class Producer(ABC):
     as constructor args. The core never imports those.
     """
 
-    directive: ClassVar[str]
+    node_type: ClassVar[type[Node]] 
 
     @abstractmethod
     def produce(self, node: Node, ctx: Context) -> ResolvedEntry:
-        #TODO: Implement this
+        ...

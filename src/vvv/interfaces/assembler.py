@@ -14,3 +14,4 @@ class Assembler(ABC):
         ctx: Context,
         output: Path,
     ) -> Path:
+        ...
