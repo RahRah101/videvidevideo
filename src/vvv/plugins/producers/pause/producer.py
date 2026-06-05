@@ -9,7 +9,7 @@ from vvv.context import Context
 
 @register_producer
 class PauseProducer(Producer):
-    directive = "pause"
+    node_type = PauseNode 
 
     def produce(self, node: Node, ctx: Context) -> ResolvedEntry:
         assert isinstance(node, PauseNode)
