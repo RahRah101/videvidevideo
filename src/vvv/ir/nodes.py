@@ -11,6 +11,7 @@ class ClipNode:
     source: str           # raw, unresolved (could be path or URL)
     from_s: float | None = None
     to_s: float | None = None
+    duration_s: float | None = None # only meaningful for image. Might be stupid
 
 @dataclass(frozen=True, slots=True)
 class PauseNode:
