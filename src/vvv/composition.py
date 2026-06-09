@@ -9,8 +9,8 @@ from vvv.interfaces.assembler import Assembler
 from vvv.plugins.producers.pause.producer import PauseProducer
 from vvv.plugins.producers.elevenlabs_narrate.producer import NarrateProducer
 from vvv.plugins.producers.elevenlabs_narrate.elevenlabs_impl import ElevenLabsTTS
-from vvv.plugins.producers.elevenlabs_narrate.mock_tts import MockTTS    # for dev
-from vvv.plugins.producers.clip.producer import ClipProducer             # check folder name!
+#from vvv.plugins.producers.elevenlabs_narrate.mock_tts import MockTTS
+from vvv.plugins.producers.clip.producer import ClipProducer
 from vvv.plugins.assemblers.kdencli.assembler import KdencliAssembler
 from vvv.phases.sync import SequentialSync
 
