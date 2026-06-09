@@ -12,6 +12,7 @@ class ClipNode:
     from_s: float | None = None
     to_s: float | None = None
     duration_s: float | None = None # only meaningful for image. Might be stupid
+    keep_audio: bool = True
 
 @dataclass(frozen=True, slots=True)
 class PauseNode:

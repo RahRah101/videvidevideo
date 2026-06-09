@@ -84,3 +84,11 @@ def download_image_media(url: str, output_dir: str) -> str:
        out_path = Path(output_dir) / filename
        urllib.request.urlretrieve(url, str(out_path))
        return str(out_path)
+
+def has_audio_stream(filepath: str | Path) -> bool:
+    result = subprocess.run(
+        [FFPROBE, "-v", "quiet", "-select_streams", "a",
+         "-show_entries", "stream=index", "-of", "csv=p=0", str(filepath)],
+        capture_output=True, text=True,
+    )
+    return bool(result.stdout.strip())

@@ -75,20 +75,25 @@ class KdencliAssembler(Assembler):
         else:
             raise RuntimeError(f"unknown kind: {entry.kind}")
 
+    #TODO: Shouldn't be TTS track. Like if we want to put the music etc... Change the whole logic of how the assembler understands tracks
     def _place_audio(self, entry, project):
         _kdencli("place", str(project),
                  "-t", self.TTS_TRACK,
-                 "--file", str(entry.media))
+                 "--file", str(entry.media),
+                 "--audio-only")
 
     def _place_video(self, entry, timed, project):
         args = ["place", str(project), "-t", self.VIDEO_TRACK,
-                "--file", str(entry.media)]
+                "--file", str(entry.media),
+        ]
         node = entry.node
         if isinstance(node, ClipNode):
             if node.from_s is not None:
                 args += ["--ss", _kdencli_ts(node.from_s)]
             if node.to_s is not None:
                 args += ["--to", _kdencli_ts(node.to_s)]
+        if not entry.extras.get("has_audio", False):
+            args += ["--video-only"]
         _kdencli(*args)
 
     def _place_image(self, entry, project):
