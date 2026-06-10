@@ -1,3 +1,5 @@
+from __future__ import annotations
+from dataclasses import dataclass, field
 import json
 import subprocess
 from pathlib import Path
@@ -5,13 +7,17 @@ import os
 import re
 import urllib.request
 import urllib.parse
-
+from . import urltime
+from vvv.interfaces.source import SourceHandler
+from vvv.registry import SOURCE_HANDLERS
+from vvv.context import Context
+from vvv.interfaces.source import SourceInfo
 
 # Path to external tools
 # TODO: Use config file
 YTDLP = "yt-dlp"
 FFPROBE = "ffprobe"
-
+FFMPEG = "ffmpeg"
 
 def probe_duration(filepath):
     result = subprocess.run(
@@ -50,31 +56,6 @@ def is_image(url):
     #another one line function that might not deserve to live
     return re.search(r"\.(jpg|jpeg|png|gif|webp)$", url)
 
-def resolve_media(path, assets_dir, download_dir):
-    """
-    Resolve a media reference to a local filepath.
-    - URLs -> download via urllib if bare image, otherwise download via yt-dlp
-    - Relative paths -> prepend assets_dir
-    - Absolute paths -> use as-is
-    """
-    path = str(path).strip()
-
-    if is_url(path):
-        if is_image(path):
-            print(f"  [download] {path}")
-            return download_image_media(path, download_dir)
-        print(f"  [download] {path}")
-        return download_video_media(path, download_dir)
-
-    p = Path(path)
-    if not p.is_absolute():
-        p = Path(assets_dir) / p
-
-    if not p.exists():
-        raise FileNotFoundError(f"Media not found: {p}")
-
-    return str(p.resolve())
-
 def is_url(path: str) -> bool:
        return bool(re.match(r"https?://", path))
 
@@ -92,3 +73,31 @@ def has_audio_stream(filepath: str | Path) -> bool:
         capture_output=True, text=True,
     )
     return bool(result.stdout.strip())
+
+
+def concat(parts: list[Path], output: Path) -> Path:
+    listfile = output.with_suffix(".txt")
+    with open(listfile, "w") as f:
+        for part in parts:
+            f.write(f"file '{Path(part).resolve()}'\n")
+    result = subprocess.run(
+        [FFMPEG, "-f", "concat", "-safe", "0", "-i", str(listfile), "-c", "copy", "-y", str(output)],
+        capture_output=True, text=True
+    )
+    listfile.unlink(missing_ok=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {result.stderr}")
+    return output
+
+def resolve_media(source: str, ctx: Context) -> SourceInfo:
+    source = str(source).strip()
+
+    for handler in SOURCE_HANDLERS:
+        if handler.handles(source):
+            return handler.resolve(source, ctx)
+    p = Path(source)
+    if not p.is_absolute():
+        p = Path(ctx.meta.assets_dir) / p
+    if not p.exists():
+        raise FileNotFoundError(f"Media not found: {p}")
+    return SourceInfo(path=p.resolve())

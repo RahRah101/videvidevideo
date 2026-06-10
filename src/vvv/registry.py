@@ -10,12 +10,16 @@ from typing import Type
 from vvv.interfaces.producer import Producer
 from vvv.interfaces.assembler import Assembler
 from vvv.interfaces.sync import SyncProvider
+from vvv.interfaces.source import SourceHandler
 
 
 PRODUCERS: dict[type, Type[Producer]] = {}
 ASSEMBLERS: dict[str, Type[Assembler]] = {}
 SYNC_PROVIDERS: dict[str, Type[SyncProvider]] = {}
+SOURCE_HANDLERS: list[SourceHandler] = []
 
+def register_source(h: SourceHandler) -> None:
+    SOURCE_HANDLERS.append(h)
 
 def register_producer(cls: Type[Producer]) -> Type[Producer]:
     if not hasattr(cls, "node_type"):
