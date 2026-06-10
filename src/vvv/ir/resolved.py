@@ -18,7 +18,6 @@ class ResolvedEntry:
     # backend-specific stuff, like say timing data returned by ElevenLabs API
     extras: dict = field(default_factory=dict)
 
-
 @dataclass(frozen=True, slots=True)
 class TimedEntry:
     resolved: ResolvedEntry
