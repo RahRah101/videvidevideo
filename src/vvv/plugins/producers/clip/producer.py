@@ -14,18 +14,17 @@ class ClipProducer(Producer):
 
     def produce(self, node: Node, ctx: Context) -> ResolvedEntry:
         assert isinstance(node, ClipNode)
-        local_path = resolve_media(
-            node.source,
-            ctx.meta.assets_dir,
-            ctx.work_dir / "media",
-        )
-        file_has_audio = has_audio_stream(local_path)
-        effective_audio = node.keep_audio and file_has_audio
+
+        info = resolve_media(node.source, ctx)
 
         return ResolvedEntry(
             node=node,
-            media=Path(local_path),
+            media=info.path,
             kind="video",
-            duration_s=probe_duration(local_path),
-            extras={"has_audio": effective_audio},
+            duration_s=probe_duration(info.path),
+            extras={
+                "has_audio": node.keep_audio and has_audio_stream(info.path),
+                # everything the source discovered
+                **info.meta,
+            },
         )

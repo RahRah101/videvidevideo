@@ -79,17 +79,20 @@ class KdencliAssembler(Assembler):
     def _place_audio(self, entry, project):
         _kdencli("place", str(project),
                  "-t", self.TTS_TRACK,
-                 "--file", str(entry.media),
-                 "--audio-only")
+                 "--file", str(entry.media))
+                 #"--audio-only")
 
     def _place_video(self, entry, timed, project):
         args = ["place", str(project), "-t", self.VIDEO_TRACK,
                 "--file", str(entry.media),
         ]
         node = entry.node
+        
         if isinstance(node, ClipNode):
-            if node.from_s is not None:
-                args += ["--ss", _kdencli_ts(node.from_s)]
+            from_s = node.from_s if node.from_s is not None else entry.extras.get("start_hint")
+            if from_s is not None:
+                #TODO: Might need to standardize magic-string contracts like "start_hint". In like a ir/meta_keys.py file or something
+                args += ["--ss", _kdencli_ts(from_s)]
             if node.to_s is not None:
                 args += ["--to", _kdencli_ts(node.to_s)]
         if not entry.extras.get("has_audio", False):
