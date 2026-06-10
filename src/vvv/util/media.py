@@ -7,7 +7,6 @@ import os
 import re
 import urllib.request
 import urllib.parse
-from . import urltime
 from vvv.interfaces.source import SourceHandler
 from vvv.registry import SOURCE_HANDLERS
 from vvv.context import Context
