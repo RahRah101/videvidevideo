@@ -46,11 +46,6 @@ def download_video_media(url, output_dir):
     #print final filepath
     return result.stdout.strip().split('\n')[-1]
 
-def download_image_media(url, output_dir):
-    #one line... seriously? Is this even needed as a function?
-    #are you dumb?
-    urllib.request.urlretrieve(url, output_dir)
-
 def is_image(url):
     #another one line function that might not deserve to live
     return re.search(r"\.(jpg|jpeg|png|gif|webp)$", url)
