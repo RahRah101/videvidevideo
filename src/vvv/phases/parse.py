@@ -3,11 +3,13 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Any
+import os
 
 import yaml
 
-from vvv.ir.nodes import Node, NarrateNode, ClipNode, PauseNode
+from vvv.ir.nodes import Node, NarrateNode, ClipNode, PauseNode, StemNode, TitleNode, TitleStyle
 from vvv.context import Meta
+
 
 
 KEYS = {
@@ -15,6 +17,8 @@ KEYS = {
     # Technically, an image is just a clip with a duration
     "clip":     ("v", "clip", "i", "image"),
     "pause":    ("_", "pause"),
+    "stem":     ("stem",),
+    "title": ("title", "text"),
 }
 
 META_KEYS = {
@@ -85,6 +89,10 @@ def _parse_entry(entry: dict) -> list[Node]:
     if k := _has(entry, "pause"):
         nodes.append(PauseNode(duration_s=float(entry[k])))
 
+    if k := _has(entry, "stem"):
+        nodes.append(_parse_stem(entry[k], entry))
+    
+
     #TODO : Implement image, edit, text_overlay, etc...
     return nodes
 
@@ -121,3 +129,24 @@ def _parse_timestamp(ts: str) -> float:
     for p in parts:
         seconds = seconds * 60 + p
     return float(seconds)
+
+def _parse_stem(value: Any, entry: dict) -> "StemNode":
+    stems = tuple(entry.get("stems", ["vocals"]))
+
+    if isinstance(value, str):
+        ts = _TIMESTAMP_RANGE.search(value)
+        if ts:
+            return StemNode(
+                source=value[:ts.start()].strip(),
+                stems=stems,
+                from_s=_parse_timestamp(ts.group(1)),
+                to_s=_parse_timestamp(ts.group(2)),
+            )
+        return StemNode(source=value.strip(), stems=stems)
+
+    return StemNode(
+        source=str(value),
+        stems=stems,
+        from_s=_parse_timestamp(entry["from"]) if "from" in entry else None,
+        to_s=_parse_timestamp(entry["to"]) if "to" in entry else None,
+    )

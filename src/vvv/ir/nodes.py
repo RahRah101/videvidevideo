@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 @dataclass(frozen=True, slots=True)
 class NarrateNode:
@@ -8,7 +8,7 @@ class NarrateNode:
 
 @dataclass(frozen=True, slots=True)
 class ClipNode:
-    source: str           # raw, unresolved (could be path or URL)
+    source: str
     from_s: float | None = None
     to_s: float | None = None
     duration_s: float | None = None # only meaningful for image. Might be stupid
@@ -18,4 +18,15 @@ class ClipNode:
 class PauseNode:
     duration_s: float
 
-Node = NarrateNode | ClipNode | PauseNode
+
+#TODO: The fact I have to specify a new stem node in a core file is disgusting.
+#The node/parser architecture needs to be more decoupled similar to producers 
+#Will have to refactor later.
+@dataclass(frozen=True, slots=True)
+class StemNode:
+    source: str                   
+    stems: tuple[str, ...] 
+    from_s: float | None = None
+    to_s: float | None = None
+
+Node = NarrateNode | ClipNode | PauseNode | StemNode | TitleNode
