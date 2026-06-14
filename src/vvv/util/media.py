@@ -68,6 +68,13 @@ def has_audio_stream(filepath: str | Path) -> bool:
     )
     return bool(result.stdout.strip())
 
+def has_video_stream(filepath: str | Path) -> bool:
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v",
+         "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(filepath)],
+        capture_output=True, text=True,
+    )
+    return "video" in result.stdout
 
 def concat(parts: list[Path], output: Path) -> Path:
     listfile = output.with_suffix(".txt")
@@ -95,3 +102,23 @@ def resolve_media(source: str, ctx: Context) -> SourceInfo:
     if not p.exists():
         raise FileNotFoundError(f"Media not found: {p}")
     return SourceInfo(path=p.resolve())
+
+
+def trim(media, from_s, to_s, output_dir):
+    from pathlib import Path
+    media_path = Path(media)
+    if from_s is None and to_s is None:
+        return media_path
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    out = output_dir / f"{media_path.stem}_seg{media_path.suffix}"
+
+    cmd = ["ffmpeg", "-y", "-i", str(media_path)]
+    if from_s is not None:
+        cmd += ["-ss", str(from_s)]
+    if to_s is not None:
+        cmd += ["-t", str(to_s - (from_s or 0))]
+    cmd += [str(out)]
+    subprocess.run(cmd, check=True)
+    return out
