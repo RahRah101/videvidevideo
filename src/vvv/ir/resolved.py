@@ -6,7 +6,7 @@ from typing import Literal
 from vvv.ir.nodes import Node
 
 
-MediaKind = Literal["audio", "video", "image", "marker"]
+MediaKind = Literal["audio", "video", "image", "marker", "title"]
 
 
 @dataclass(frozen=True, slots=True)

@@ -72,6 +72,8 @@ class KdencliAssembler(Assembler):
             self._place_image(entry, project)
         elif entry.kind == "marker":
             self._place_marker(timed)
+        elif entry.kind == "title":
+            self._place_title(entry, timed, project)
         else:
             raise RuntimeError(f"unknown kind: {entry.kind}")
 
@@ -110,3 +112,34 @@ class KdencliAssembler(Assembler):
         # but don't get a clip. Future: insert a blank/gap if kdencli
         # adds support.
         pass
+    def _place_title(self, entry, timed, project):
+        node = entry.node          # TitleNode
+        s = node.style
+        args = ["title", str(project),
+                "--text", node.text,
+                "--at", str(timed.start_s),
+                "--duration", str(node.duration_s)]
+
+        # placement: explicit xy overrides anchor
+        if node.x is not None and node.y is not None:
+            args += ["--xy", "--x", str(node.x), "--y", str(node.y)]
+        else:
+            args += ["--anchor", node.anchor, "--margin", str(node.margin)]
+
+        args += self._title_style_args(s)
+        _kdencli(*args)
+
+    def _title_style_args(self, s):
+        args = ["--font", s.font, "--font-size", str(s.font_size),
+                "--color", s.color, "--outline-color", s.outline_color,
+                "--outline", s.outline,
+                "--box-width", str(s.box_width), "--box-height", str(s.box_height),
+                "--letter-spacing", str(s.letter_spacing),
+                "--line-spacing", str(s.line_spacing)]
+        if s.bold:      args.append("--bold")
+        if s.italic:    args.append("--italic")
+        if s.underline: args.append("--underline")
+        if s.font_file: args += ["--font-file", s.font_file]
+        if s.shadow:    args += ["--shadow", s.shadow]
+        if s.gradient:  args += ["--gradient", s.gradient]
+        return args
