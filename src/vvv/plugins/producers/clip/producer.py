@@ -6,7 +6,8 @@ from vvv.interfaces.producer import Producer
 from vvv.ir.nodes import Node, ClipNode
 from vvv.ir.resolved import ResolvedEntry
 from vvv.context import Context
-from vvv.util.media import resolve_media, probe_duration, has_audio_stream
+#TODO: This is fcking garbage. four separate media-probing functions imported à la carte. Turn that into one probe thing later.
+from vvv.util.media import resolve_media, probe_duration, has_audio_stream, has_video_stream
 
 @register_producer
 class ClipProducer(Producer):
@@ -20,7 +21,7 @@ class ClipProducer(Producer):
         return ResolvedEntry(
             node=node,
             media=info.path,
-            kind="video",
+            kind = "video" if has_video_stream(info.path) else "audio",
             duration_s=probe_duration(info.path),
             extras={
                 "has_audio": node.keep_audio and has_audio_stream(info.path),
