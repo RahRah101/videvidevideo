@@ -62,7 +62,7 @@ def parse(raw: dict) -> ParsedScript:
 def _parse_meta(raw: dict) -> Meta:
     return Meta(
         title=raw.get(META_KEYS["title"], "untitled"),
-        voice_id=raw.get(META_KEYS["voice_id"], ""),
+        voice_id=raw.get(META_KEYS["voice_id"]) or os.environ.get("ELEVENLABS_VOICE_ID", ""),
         fps=raw.get(META_KEYS["fps"], 30),
         resolution=tuple(raw.get(META_KEYS["resolution"], [1920, 1080])),
         assets_dir=Path(raw.get(META_KEYS["assets_dir"], "assets/")),
