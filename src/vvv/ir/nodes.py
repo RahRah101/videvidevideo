@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True, slots=True)
 class NarrateNode:
     text: str
+    voice: str | None = None
     # on_word, effect
 
 @dataclass(frozen=True, slots=True)

@@ -22,7 +22,7 @@ _HMS_TOKEN = re.compile(
 
 class YouTubeHandler(SourceHandler):
     def handles(self, source: str) -> bool:
-        return "youtube.com" in source or "youtu.be" in source
+        return "youtube.com" in source or "youtu.be" or "instagram" in source
 
     def resolve(self, source: str, ctx: Context) -> SourceInfo:
         download_dir = ctx.work_dir / "media"

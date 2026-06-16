@@ -28,17 +28,18 @@ class NarrateProducer(Producer):
         audio_dir = ctx.work_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
         
+        voice = node.voice or ctx.meta.voice_id
 
-        chunks = split_for_tts(node.text, ctx.meta.char_lim)
+        chunks = split_for_tts(node.text, voice)
         out = (audio_dir / f"narrate_{self._counter:03d}.mp3").resolve()
 
         if len(chunks) == 1:
-            self.tts.synthesize(chunks[0], ctx.meta.voice_id, out)
+            self.tts.synthesize(chunks[0], voice, out)
         else:
             parts = []
             for i, chunk in enumerate(chunks):
                 part = (audio_dir / f"narrate_{self._counter:03d}_{i:03d}.mp3").resolve()
-                self.tts.synthesize(chunk, ctx.meta.voice_id, part)
+                self.tts.synthesize(chunk, voice, part)
                 parts.append(part)
             concat(parts, out)
         

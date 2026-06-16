@@ -45,6 +45,18 @@ _TIMESTAMP_RANGE = re.compile(
     re.VERBOSE,
 )
 
+_VOICE_ID = re.compile(
+    r"""
+    \s*
+    \[                                      # opening bracket
+    voice:
+    .*                                      # group 1: voice_id
+    \]                                      # closing bracket
+    $
+    """,
+    re.VERBOSE,
+)
+
 @dataclass(frozen=True, slots=True)
 class ParsedScript:
     meta: Meta
@@ -81,7 +93,7 @@ def _parse_entry(entry: dict) -> list[Node]:
     nodes: list[Node] = []
 
     if k := _has(entry, "narrate"):
-        nodes.append(NarrateNode(text=str(entry[k])))
+        nodes.append(_parse_narrate(entry[k], entry))
 
     if k := _has(entry, "clip"):
         nodes.append(_parse_clip(entry[k], entry, matched_key=k))
@@ -186,3 +198,9 @@ def _parse_stem(value: Any, entry: dict) -> "StemNode":
         from_s=_parse_timestamp(entry["from"]) if "from" in entry else None,
         to_s=_parse_timestamp(entry["to"]) if "to" in entry else None,
     )
+
+
+def _parse_narrate(value: Any, entry: dict) -> NarrateNode:  
+    text = str(entry.get("text"))
+    voice_id = str(entry.get("voice"))
+    return NarrateNode(text=text, voice=voice_id)
