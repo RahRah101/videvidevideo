@@ -201,6 +201,6 @@ def _parse_stem(value: Any, entry: dict) -> "StemNode":
 
 
 def _parse_narrate(value: Any, entry: dict) -> NarrateNode:  
-    text = str(entry.get("text"))
-    voice_id = str(entry.get("voice"))
+    text = str(value)
+    voice_id = entry.get("voice")
     return NarrateNode(text=text, voice=voice_id)
