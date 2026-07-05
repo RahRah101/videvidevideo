@@ -30,7 +30,7 @@ class NarrateProducer(Producer):
         
         voice = node.voice or ctx.meta.voice_id
 
-        chunks = split_for_tts(node.text, voice)
+        chunks = split_for_tts(node.text, ctx.meta.char_lim)
         out = (audio_dir / f"narrate_{self._counter:03d}.mp3").resolve()
 
         if len(chunks) == 1:
