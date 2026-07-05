@@ -27,7 +27,14 @@ def probe_duration(filepath):
     if result.returncode != 0:
         raise RuntimeError(f"ffprobe failed on {filepath}: {result.stderr}")
     info = json.loads(result.stdout)
+    if "format" not in info or "duration" not in info.get("format", {}):
+        raise RuntimeError(
+            f"No duration for {filepath}. "
+            f"format keys: {list(info.get('format', {}).keys())}. "
+            f"Is this an image or a bad download?"
+        )
     return float(info["format"]["duration"])
+
 def download_video_media(url, output_dir):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -36,6 +43,7 @@ def download_video_media(url, output_dir):
     # How would you do that?
     result = subprocess.run(
         [YTDLP, "--restrict-filenames", "--no-overwrites",
+         "--remote-components", "ejs:github",
          "-o", f"{output_dir}/%(id)s.%(ext)s",
          "--print", "after_move:filepath",
          url],
@@ -57,7 +65,16 @@ def download_image_media(url: str, output_dir: str) -> str:
        Path(output_dir).mkdir(parents=True, exist_ok=True)
        filename = Path(urllib.parse.urlparse(url).path).name or "image"
        out_path = Path(output_dir) / filename
-       urllib.request.urlretrieve(url, str(out_path))
+
+       # nasty workaround, sometimes without user agent you get 403'd
+       req = urllib.request.Request(
+               url,
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) "
+                               "AppleWebKit/537.36 (KHTML, like Gecko) "
+                               "Chrome/120.0 Safari/537.36"},
+        )
+       with urllib.request.urlopen(req) as resp, open(out_path, "wb") as f:
+           f.write(resp.read())
        return str(out_path)
 
 def has_audio_stream(filepath: str | Path) -> bool:
