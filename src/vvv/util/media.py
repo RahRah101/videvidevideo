@@ -133,6 +133,11 @@ def resolve_media(source: str, ctx: Context) -> SourceInfo:
         raise FileNotFoundError(f"Media not found: {p}")
     return SourceInfo(path=p.resolve())
 
+def _ts_tag(seconds: float | None, default: str) -> str:
+    if seconds is None:
+        return default
+    ms = int(round(float(seconds) * 1000))
+    return f"{ms}ms"
 
 def trim(media, from_s, to_s, output_dir):
     from pathlib import Path
@@ -140,9 +145,17 @@ def trim(media, from_s, to_s, output_dir):
     if from_s is None and to_s is None:
         return media_path
 
+    start_tag = _ts_tag(from_s, "start")
+    end_tag = _ts_tag(to_s, "end")
+
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    out = output_dir / f"{media_path.stem}_seg{media_path.suffix}"
+    out = output_dir / f"{media_path.stem}_seg_{start_tag}_{end_tag}{media_path.suffix}"
+    
+    # Dumb ''''''''''''''''''caching'''''''''''''''
+    if out.exists():
+        print(f"[trim] skip exists: {out}")
+        return out
 
     cmd = ["ffmpeg", "-y", "-i", str(media_path)]
     if from_s is not None:
