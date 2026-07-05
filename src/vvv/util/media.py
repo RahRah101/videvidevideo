@@ -38,21 +38,34 @@ def probe_duration(filepath):
 def download_video_media(url, output_dir):
     os.makedirs(output_dir, exist_ok=True)
 
+    ytcmd = [
+        YTDLP,
+        "--restrict-filenames",
+        "--no-overwrites",
+        "-o", f"{output_dir}/%(id)s.%(ext)s",
+        "--print", "after_move:filepath",
+    ]
+
+    # dirty workaround trials in case it fails with some things. I force firefox cookies which is dumb and nasty for now but good enough for what is a tool none of you actually will use, lol
+    attempts = [
+        ytcmd + [url],
+        ytcmd + ["--remote-components", "ejs:github", url],
+        ytcmd + ["--cookies-from-browser", "firefox", url],
+        ytcmd + ["--remote-components", "ejs:github", "--cookies-from-browser", "firefox", url],
+    ]
+
     # TODO: you would want to find a way for the user the specify
     # download parameters (quality etc...) potentially in the DSL
     # How would you do that?
-    result = subprocess.run(
-        [YTDLP, "--restrict-filenames", "--no-overwrites",
-         "--remote-components", "ejs:github",
-         "-o", f"{output_dir}/%(id)s.%(ext)s",
-         "--print", "after_move:filepath",
-         url],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp failed on {url}: {result.stderr}")
-    #print final filepath
-    return result.stdout.strip().split('\n')[-1]
+    errors = []
+    for cmd in attempts:
+        print("  $ " + " ".join(cmd), flush=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            return result.stdout.strip().split("\n")[-1]
+        errors.append(result.stderr)
+
+    raise RuntimeError(f"yt-dlp failed on {url}: {result.stderr} after {len(attempts)} attempts" + "\n\n - attempt error - \n".join(errors))
 
 def is_image(url):
     #another one line function that might not deserve to live
