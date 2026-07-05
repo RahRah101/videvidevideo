@@ -11,7 +11,7 @@ from .tts_backend import TTSBackend
 
 from vvv.util.text import split_for_tts
 from vvv.util.media import probe_duration, concat
-
+import hashlib
 
 @register_producer
 class NarrateProducer(Producer):
@@ -31,7 +31,23 @@ class NarrateProducer(Producer):
         voice = node.voice or ctx.meta.voice_id
 
         chunks = split_for_tts(node.text, ctx.meta.char_lim)
+        #TODO:Uncomment this
+        #key = hashlib.sha256(f"{text}\x00{voice}".encode()).hexdigest()[:16]
+        #out = audio_dir / f"narrate_{key}.mp3"
+        #TODO:Comment this 
         out = (audio_dir / f"narrate_{self._counter:03d}.mp3").resolve()
+
+
+
+        # Crude caching that assumes re-runs on the same yaml... this is just to help me save credits when testing on a big script so I don't send requests to ElevenLabs again and again
+        #TODO : Better caching behavior. Use text+voice_id prolly.
+        if out.exists():
+            return ResolvedEntry(
+                node=node,
+                media=out,
+                kind="audio",
+                duration_s=probe_duration(out),
+            )
 
         if len(chunks) == 1:
             self.tts.synthesize(chunks[0], voice, out)
