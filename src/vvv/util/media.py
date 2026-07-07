@@ -35,8 +35,21 @@ def probe_duration(filepath):
         )
     return float(info["format"]["duration"])
 
+def _extract_youtube_id(url):
+    pattern = r'(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})'
+    
+    match = re.search(pattern, url)
+    return match.group(1) if match else None
+
 def download_video_media(url, output_dir):
     os.makedirs(output_dir, exist_ok=True)
+    
+    vid = _extract_video_id(url)
+    if vid:
+        existing = glob.glob(f"{output_dir}/{vid}.*")
+        if existing:
+            # This is dirty but this is to cache and avoid calling yt-dlp when something is already there
+            return existing[0] 
 
     ytcmd = [
         YTDLP,
