@@ -18,11 +18,17 @@ class ClipProducer(Producer):
 
         info = resolve_media(node.source, ctx)
         has_video = has_video_stream(info.path)
+        
+        kind = "video"
+        if node.duration_s is not None: 
+            kind = "image"
+        else:
+            kind = "video" if has_video else "audio"
 
         return ResolvedEntry(
             node=node,
             media=info.path,
-            kind = "video" if has_video else "audio",
+            kind = kind,
             duration_s=node.duration_s if node.duration_s is not None else probe_duration(info.path),
             extras={
                 "has_audio": node.keep_audio and has_audio_stream(info.path),
