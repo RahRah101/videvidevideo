@@ -105,7 +105,7 @@ class KdencliAssembler(Assembler):
         _kdencli("place", str(project),
                  "-t", self.VIDEO_TRACK,
                  "--file", str(entry.media),
-                 "--length", str(entry.duration_s))
+                 "--length", str(entry.duration_s or 1.0))
 
     def _place_marker(self, timed):
         # No file to place. Pauses contribute to the timeline cursor
