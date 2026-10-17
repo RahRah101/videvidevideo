@@ -17,7 +17,7 @@ How the layers split when targeting HyperFrames:
 
 | Layer | Owns | Cost |
 |---|---|---|
-| **vvv** | Script -> deterministic skeleton: acquisition, ElevenLabs narration (per-line voices), stems, timing, captions, cached everything | zero tokens, cheap, repeatable |
+| **vvv** | Script -> deterministic skeleton: acquisition, ElevenLabs narration (per-line voices), stems, timing, captions, cached everything | vvv itself costs nothing; the backends it calls (ElevenLabs, stems, gen AI) may cost credits - your choice. Cheap, repeatable |
 | **HyperFrames** | Timeline, rendering, effects/motion, preview, hand edits (Studio) | compute only |
 | **Agent** | Only `e:`/`edit:` blocks + creative passes on ONE chunk at a time | tokens - spent only where an LLM is actually worth it |
 
@@ -25,9 +25,9 @@ vvv's value is explicit: 90% of an hour-long essay is narration + clips + images
 
 Guardrail: core phases (parse/resolve/sync) stay assembler-neutral. Anything HyperFrames-specific lives in its assembler plugin.
 
-**Drop-the-HyperFrames-backend criteria** (if the spike shows any of these, stop investing in it and keep shipping through kdencli):
+**Drop-the-HyperFrames-backend criteria** (if the spike shows any of these, stop investing in it and keep shipping through kdencli; all untested - the spike checks them; render goes through the CLI, Studio is optional):
 * core preview/render can't run fully offline
-* a 1-hour project is unworkable in Studio/preview even when chunked by chapter
+* a 1-hour project is unworkable in preview/CLI render even when chunked by chapter
 * render time is so bad that chapter-level re-renders don't fix it
 
 ---
@@ -55,7 +55,7 @@ Kdenlive was one-shot: generate once, hand-edit, never regenerate. HyperFrames l
 * [ ] vvv owns the root composition + timing skeleton. Regenerated freely; never edited by hand.
 * [ ] Agent/creative work lives in agent-owned sub-compositions (`edits/<id>.html`) that vvv REFERENCES and never writes.
 * [ ] Studio/human tweaks (move, trim, nudge) persist as an **Embedded Override** delta over the vvv base, not as edits to the base file.
-* [ ] Deterministic element IDs from a position-independent content key (same hashing as the cache) so references and overrides survive script edits/reordering.
+* [ ] Deterministic element IDs from a position-independent content key (same hashing as the cache) so references and overrides survive script edits/reordering. Helper exists: `ir/ids.element_ids(nodes)` (content key + occurrence index for identical lines), nothing uses it yet.
 * [ ] Verify: does an override survive a base regen when IDs are stable? Orphaned overrides (target removed) -> warn loudly, never drop silently.
 * [ ] Rule: if you're hand-editing vvv's generated `index.html`, the contract is broken - fix the DSL or the override instead.
 
@@ -102,14 +102,18 @@ Middle ground between creativity/agency and productivity, not AI slop: you write
 ## Caching
 Current caching behavior is crude and garbage. Use hashing.
 * [ x ] **Narration** - `out.exists()` guard skips the ElevenLabs call. WORKS.
-  * [ ] TODO: upgrade key from counter to CONTENT HASH. Key on `hash(text + voice_id)[:8]` 
+  * [x] TODO: upgrade key from counter to CONTENT HASH. Key on `hash(text + voice_id)[:8]` 
     * Put a separator between them: `hash(text + "\x00" + voice_id)` so `"ab"+"c"` != `"a"+"bc"`. Filename `narrate_{NNN}_{hash8}.mp3` keeps human ordering.
+    * Done: key = text + voice + `TTSBackend.cache_identity()` (ElevenLabs adds `model_id`), canonical JSON instead of the `\x00` separator, 16 hex. Filename `narrate_{NNN}_{key}.mp3`; lookup is by key only, so reordering reuses the audio. One cache entry per chunk: a run that dies midway only redoes the missing chunks.
+    * Old `narrate_NNN.mp3` files stop the run before any ElevenLabs call. To reuse them (assumes your script hasn't changed since), add `config: { narrate: { adopt_legacy: true } }` to the script, run once, then remove it.
 * [ ] **Stems**
     * [ ] Proper key: `hash(source + range + stems + model)`.
-    * [ ] The existing `[skip] exists` check fires too late - after re-encode + re-upload + the full x-minus job. Hoist it to the top of the routine.
-* [ ] **Video download** = `--no-overwrites` isn't enough. Fix cleanly with yt-dlp's own `--download-archive build/media/.archive.txt`, so then we can check a local ID list FIRST, skipping WITHOUT hitting youtube 
-* [ ] **BIG unify**: one content-addressed `Cache` abstraction all producers use, `key = hash(inputs); if cache.has(key): return; else do_work(); cache.put(key)`. Identity by content-hash.
-    * [ ] "inputs" = everything that changes the output: prompt/spec + seed + backend + model version (+ params). Narration too: add the ElevenLabs `model_id` to its key, switching models changes the audio.
+    * [ ] The existing `[skip] exists` check fires too late - after re-encode + re-upload + the full x-minus job. Hoist it to the top of the routine. (that check lives in the external backend, not in this repo)
+* [ ] **Video download** = There's a crude `<id>.*` pre-check now (YouTube IDs only, partial downloads ignored), but it's not enough. Fix cleanly with yt-dlp's own `--download-archive build/media/.archive.txt`, so then we can check a local ID list FIRST, skipping WITHOUT hitting youtube 
+* [x] **BIG unify**: one content-addressed `Cache` abstraction all producers use, `key = hash(inputs); if cache.has(key): return; else do_work(); cache.put(key)`. Identity by content-hash.
+    * Done: `util/cache.py` - `cache_key(kind, **inputs)` + `Cache(dir).get_or_make(key, make, prefix, suffix)`. `make` writes a temp file that is renamed into place only when it finishes, so an interrupted run never leaves a broken file that looks cached. Used by narration, image URLs (keyed on URL: no re-download, no basename collisions, warm rebuilds offline) and trim (keyed on abs path + size/mtime + range: no collisions across directories, replacing the source invalidates).
+    * [ ] Not on it yet: video downloads (see above), stems' separation step (lives in the backend).
+    * [x] "inputs" = everything that changes the output: prompt/spec + seed + backend + model version (+ params). Narration too: add the ElevenLabs `model_id` to its key, switching models changes the audio.
     * [ ] For backends that never reproduce (APIs, ElevenLabs itself), the cache IS the determinism: pin accepted outputs in a lock file (`vvv.lock`). Rebuilds reuse the pin; regenerate only when explicitly asked.
 
 ---
@@ -139,20 +143,21 @@ Current caching behavior is crude and garbage. Use hashing.
 ---
 
 ## DSL extensibility (decouple nodes/parser like producers)
-* [ ] Adding a directive currently requires editing CORE files (`ir/nodes.py` + `phases/ parse.py`). Garbage.
+* [x] Adding a directive currently requires editing CORE files (`ir/nodes.py` + `phases/ parse.py`). Garbage. Done for the parse half: you add `node.py` + `directive.py` in your plugin package, and neither file changes.
     * A directive should be a self-contained plugin = node + parse-handler (registered by key) + producer, all from outside core.
-    * Build a parse-handler registry (key => fn, dispatched in `_parse_entry` the way
-  producers dispatch by node_type).
-    * Then directives plug in via entry points like stem backends do.
+    * [x] Build a parse-handler registry (key => fn, dispatched in `_parse_entry` the way
+  producers dispatch by node_type). `register_directive(Directive(name, aliases, parse, keys))`, stored in `registry.DIRECTIVES`; `keys` = entry-level keys the directive reads, so parse can warn on unknown keys and error on keys two directives in one entry both read.
+    * [ ] Then directives plug in via entry points like stem backends do. Not yet: your plugin only registers if `vvv.plugins` imports its package.
+    * [ ] Still core-coupled for a new directive: composition.py wiring (`build(config)` below), the `MediaKind` literal in `ir/resolved.py`, and the assembler's kind dispatch (the kdencli assembler also imports `ClipNode` directly).
     * Just copy the producer/backend registration pattern to be honest. That's literally it
     * **Update - it's only half that simple.** Registries work when constructors take no args (sources, stem backends). Producers need injected deps (`NarrateProducer(tts)`, `StemProducer(separator)`), so `@register_producer` is decoration only - read by `--list-producers`, not by resolve.
-        * Node (dataclass) and parse handler (`(value, entry) -> Node`) really can copy the source pattern.
+        * Node (dataclass) and parse handler (`(value, entry) -> Node`) really can copy the source pattern. Done - the handler is `(value, entry, matched_key) -> Node`, nodes subclass `ir/nodes.Node`.
         * Producer: register a factory, `@classmethod build(cls, config)`; composition.py becomes `{n: cls.build(config) for n, cls in PRODUCERS.items()}`. Context still never carries backends.
         * Needs a `Config` object, not the full config layer: a frozen dataclass filled from today's env vars is enough.
         * First real consumer is the assembler registry (`--target kdenlive|hyperframes`). Land `build(config)` for assemblers + producers together then.
-        * [ ] Now: add the missing `@register_producer` to Stem + Title so `--list-producers` stops lying.
+        * [x] Now: add the missing `@register_producer` to Stem + Title so `--list-producers` stops lying.
         * Producers are stateful per run (`NarrateProducer._counter`): build fresh each run, never cache instances.
-        * Replace import-side-effect registration (`import vvv.composition` in tests) with explicit entry-point loading.
+        * Replace import-side-effect registration (`import vvv.plugins` in cli.py) with explicit entry-point loading.
 
 ---
 
@@ -197,6 +202,7 @@ No new "Generator" abstraction. Everything that produces media is already a gene
 ## Config layer
 * [ ] ElevenLabs voice + stem backend are hardcoded/env-var. Need real config.
     * Per-project (meta in YAML) + global config file.
+        * Started: a top-level `config:` block in the script (`vvv/config.py`). Each component reads its own section via `from_config` (`narrate.adopt_legacy`, `elevenlabs.model_id`), so composition.py never learns a section's keys. Unknown keys/sections warn. Global file not yet.
     * Backend selection (stem, TTS), API keys, kdencli path, default fonts/tracks.
     * composition.py reads config instead of hardcoding shit.
     * Also: assembler target, hyperframes path, new media backends + their API keys.
@@ -223,7 +229,7 @@ No new "Generator" abstraction. Everything that produces media is already a gene
   keeps snippets purely declarative.
 * [ ] Static vars: parse-time env + substitution.
 * [ ] Dynamic source: `as: <name>` binds a node's RESOLVED extras to a name in ctx.bindings; `{name.field}` placeholders in ANY field reference a binding; a SUBSTITUTION pass after RESOLVE (value now known) before/at assemble fills them.
-* [ ] Prereq: youtube handler forwards title/date/uploader into `info.meta`.
+* [ ] Prereq: youtube handler (now `plugins/sources/ytdlp`, all yt-dlp sites) forwards title/date/uploader into `info.meta`.
 * Not the same as HyperFrames variables: vvv vars resolve at compile time; HF variables are render-time parameters for preset/agent compositions.
 
 For example, this could be used for a copyright snippet to give credits on queried videos from youtube :
@@ -261,8 +267,8 @@ TODO
 ## Stem backend completion
 * [ ] Finish `LocalDemucs.separate()` (the public reference backend is still a STUB, mostly because I can't test LocalDemucs as I do not have a powerful GPU, so far only stem backend tested is an unexposed script using that bots some online platform that offers stem separation)
     * No GPU isn't a blocker for *testing*: htdemucs runs on CPU, and stems are separated on the trimmed segment, so a 10-30 s clip takes minutes. Run it once on a short trim.
-    * [ ] Use `sys.executable` not `"python3"`; `--two-stems vocals` when only vocals are requested.
-    * [ ] StemProducer: use the shared `media.trim` instead of its private `_trim_audio`.
+    * [ ] When you implement it: use `sys.executable`, not `"python3"`; `--two-stems vocals` when only vocals are requested.
+    * [x] StemProducer uses the shared `media.trim`.
 
 ---
 
@@ -273,10 +279,12 @@ TODO
 ---
 
 ## Producer / media correctness (verify, some may already be fixed)
-* [ ] `keep_audio`: string branch of `_parse_clip` never sets it -> audio silently stripped.
-* [ ] Clip parser footgun: string branch returns before reading entry-level `from:`/`to:`/`audio:`.
-* [ ] `download_image_media`: browser User-Agent (or shell out to curl) - Wikimedia/CDNs 403 the Python UA.
-* [ ] Parser: unknown keys must warn, not be silently dropped (`t:` was being dropped).
+* [x] `keep_audio`: string branch of `_parse_clip` never sets it -> it stays True, so `audio: false` is silently ignored. Fixed: `audio:` is read for every clip.
+* [x] Clip parser footgun: string branch returns before reading entry-level `from:`/`to:`/`audio:`. Same in _parse_stem. The non-string branch (the only one reading them) is effectively unreachable. Fixed: both go through `util/dsl.split_source_range`; inline range + `from:`/`to:` together is an error.
+* [x] `download_image_media` sends a browser User-Agent.
+* [x] Parser: unknown keys must warn, not be silently dropped (`t:` is still dropped - not in KEYS["title"]). Fixed: `t:` is a title alias; unknown keys and entries without a directive warn, conflicts and bad values error (all reported at once).
+* [ ] Parser: when a script has errors, its warnings aren't printed - print both together.
+* [ ] `v:`/`i:` accept a source string only; the dict form (`i: { prompt: ... }` from New media sources) errors for now.
 
 ---
 
@@ -286,12 +294,11 @@ C++-side work lives in the KdenCLI repo's own `KDENCLI_TODO.md`.
 ---
 
 ## Dropped / superseded
-* Remotion -> HyperFrames.
 * MPV interactive preview (old V4) -> HF preview + Studio for the HF backend. Revisit only if a terminal "pause at gaps, re-prompt" loop is still wanted.
 * OTIO second assembler -> parked indefinitely.
 
 ---
 
 ## Misc banked
-* [ ] Fractional fps / float drift -> integer frames (both backends).
+* [ ] Fractional fps / float drift -> integer frames (both backends). Sub-second timestamps already parse (`1:05.5`) and reach kdencli as `M:SS.mmm`.
 * [ ] Blog post - after a video actually ships.

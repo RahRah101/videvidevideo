@@ -2,7 +2,7 @@
 
 **Core architecture:** YAML DSL => Python orchestrator => ElevenLabs TTS => Remotion/Kdenlive compositions => rendered video
 
-> vvv is a deterministic script-to-video tool and backend-agnostic: YAML DSL -> vvv (acquisition, ElevenLabs TTS, stems, timing) => **pluggable assembler** => editor project / rendered video. Assemblers today: Kdenlive via KdenCLI (working). Current focus: a HyperFrames (HTML/CSS => MP4) assembler, which takes the place Remotion had in this doc. When targeting HyperFrames, vvv compiles the deterministic 90% (zero tokens), HyperFrames does timeline/effects/render, and an agent only touches `e:` blocks one chunk at a time. Status: V1 proven on Kdenlive (158 nodes, ~1 hr). Plan: `TODO.md` Phase 1–5.
+> vvv is a deterministic script-to-video tool and backend-agnostic: YAML DSL -> vvv (acquisition, ElevenLabs TTS, stems, timing) => **pluggable assembler** => editor project / rendered video. Assemblers today: Kdenlive via KdenCLI (working). Current focus: a HyperFrames (HTML/CSS => MP4) assembler, alongside the Remotion plans in this doc. When targeting HyperFrames, vvv compiles the deterministic 90% (vvv itself spends nothing; the backends it calls may), HyperFrames does timeline/effects/render, and an agent only touches `e:` blocks one chunk at a time. Status: V1 proven on Kdenlive (158 nodes, ~1 hr). Plan: `TODO.md` Phase 1–5.
 
 ---
 
@@ -12,7 +12,7 @@ The DSL is the foundation everything else builds on. Every version of the pipeli
 
 ### Shorthand (what you actually write)
 
-Designed for speed. A preprocessor expands this into the full YAML before the pipeline touches it.
+Designed for speed. A preprocessor expands this into the full YAML before the pipeline touches it. (Not built yet: no expand.py; the parser reads shorthand directly.)
 
 ```yaml
 meta:
@@ -89,7 +89,7 @@ s:
 
 ### Full YAML (what the pipeline reads)
 
-The preprocessor (`expand.py`) converts shorthand into this format. The rest of the pipeline only ever sees YAML.
+The preprocessor (`expand.py`) converts shorthand into this format. The rest of the pipeline only ever sees YAML. (Accepted today: `script:`, `voice_id:`, `resolution:` alongside their shorthands. Not yet: `text_overlay:`, `edit:`, `transition:`, `on_word:`, `effect:` - they warn as unknown keys and are ignored.)
 
 ```yaml
 meta:
@@ -240,7 +240,7 @@ script.yaml
 **HyperFrames target notes**
 - vvv emits HTML from templates; it doesn't drive `@hyperframes/sdk` for generation.
 - Round-trip contract: vvv owns the root composition and regenerates it freely; agent work lives in sub-compositions vvv references but never writes; Studio/hand tweaks persist as Embedded Override deltas. Deterministic (content-hash) element IDs keep references and overrides stable.
-- Costs: Node 22+; render ~1–2.5* realtime (1–2.5+ h for an hour) => chunk by chapter; offline viability must be verified (Studio desktop app wants a HeyGen sign-in).
+- Costs: Node 22+; render ~1–2.5* realtime (1–2.5+ h for an hour) => chunk by chapter; render speed and offline viability untested (CLI render is the path that matters; the Studio desktop app wants a HeyGen sign-in, but Studio is optional).
 
 ---
 
