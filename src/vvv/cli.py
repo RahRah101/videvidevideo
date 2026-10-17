@@ -36,7 +36,7 @@ def main() -> int:
 
 
 def _run(script_path: Path, work_dir: Path, output: Path | None) -> int:
-    from vvv.phases.parse import parse
+    from vvv.phases.parse import parse, DSLError
     from vvv.phases.resolve import resolve
     from vvv.context import Context
     from vvv.composition import build_producers, build_sync, build_assembler
@@ -44,7 +44,13 @@ def _run(script_path: Path, work_dir: Path, output: Path | None) -> int:
     with open(script_path) as f:
         raw = yaml.safe_load(f)
 
-    parsed = parse(raw)
+    try:
+        parsed = parse(raw)
+    except DSLError as e:
+        print(f"[parse] errors in {script_path}:\n{e}", file=sys.stderr)
+        return 1
+    for w in parsed.warnings:
+        print(f"[parse] warning: {w}", file=sys.stderr)
     print(f"[parse] {len(parsed.nodes)} nodes from {script_path}")
 
     work_dir.mkdir(parents=True, exist_ok=True)

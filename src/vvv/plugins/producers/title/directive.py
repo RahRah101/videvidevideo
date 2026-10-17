@@ -1,9 +1,14 @@
 from __future__ import annotations
+from dataclasses import fields
 from typing import Any
 
 from vvv.registry import register_directive
 from vvv.interfaces.directive import Directive
+from vvv.util.dsl import pick
 from .node import TitleNode, TitleStyle
+
+
+_STYLE_KEYS = {f.name for f in fields(TitleStyle)} | {"size"}   # size = alias of font_size
 
 
 def _parse_title(value: Any, entry: dict, matched_key: str) -> TitleNode:
@@ -15,14 +20,19 @@ def _parse_title(value: Any, entry: dict, matched_key: str) -> TitleNode:
         x=entry.get("x"),
         y=entry.get("y"),
         track=entry.get("track"),
-        duration_s=float(entry.get("duration", 5.0)),
+        duration_s=float(pick(entry, "duration", "d", default=5.0)),
         style=style,
     )
 
 def _parse_style(raw: dict) -> TitleStyle:
+    if not isinstance(raw, dict):
+        raise ValueError(f"style: must be a mapping, got {raw!r}")
+    unknown = sorted(set(raw) - _STYLE_KEYS)
+    if unknown:
+        raise ValueError(f"unknown style key(s) {unknown}; known: {sorted(_STYLE_KEYS)}")
     return TitleStyle(
         font=raw.get("font", "Arial"),
-        font_size=int(raw.get("font_size", raw.get("size", 50))),
+        font_size=int(pick(raw, "font_size", "size", default=50)),
         color=raw.get("color", "255,255,255,255"),
         outline_color=raw.get("outline_color", "0,0,0,255"),
         outline=str(raw.get("outline", "2")),
@@ -39,4 +49,7 @@ def _parse_style(raw: dict) -> TitleStyle:
     )
 
 
-register_directive(Directive("title", ("title", "text"), _parse_title))
+register_directive(Directive(
+    "title", ("t", "title", "text"), _parse_title,
+    frozenset({"style", "anchor", "margin", "x", "y", "track", "duration", "d"}),
+))

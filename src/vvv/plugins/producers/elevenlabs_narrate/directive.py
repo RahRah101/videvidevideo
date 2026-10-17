@@ -23,7 +23,9 @@ _VOICE_ID = re.compile(
 def _parse_narrate(value: Any, entry: dict, matched_key: str) -> NarrateNode:
     text = str(value)
     voice_id = entry.get("voice")
+    if voice_id is not None and not isinstance(voice_id, str):
+        raise ValueError(f"voice: must be a voice ID string, got {voice_id!r}")
     return NarrateNode(text=text, voice=voice_id)
 
 
-register_directive(Directive("narrate", ("n", "narrate"), _parse_narrate))
+register_directive(Directive("narrate", ("n", "narrate"), _parse_narrate, frozenset({"voice"})))

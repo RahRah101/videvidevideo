@@ -12,8 +12,13 @@ class Directive:
     parse(value, entry, matched_key) -> Node
       value       = entry[matched_key]
       entry       = the whole YAML entry (for entry-level keys like from:/to:)
-      matched_key = the alias that matched (e.g. "i" vs "v")
+      matched_key = the alias that matched (e.g. "title" vs "t")
+      Raise ValueError on bad input; parse collects every error in the script and reports them together.
+
+    keys = entry-level keys this directive reads besides its alias. parse warns on keys no
+    directive in the entry claims, and errors when two directives in one entry claim the same key.
     """
     name: str
     aliases: tuple[str, ...]
     parse: Callable[[Any, dict, str], Node]
+    keys: frozenset[str] = frozenset()
