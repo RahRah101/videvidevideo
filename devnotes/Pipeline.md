@@ -1,6 +1,8 @@
 **Goal:** One command, script in, video out. No GUI prompting, no IDE bloat. CLI-native long-form video production.
 
-**Core architecture:** YAML DSL → Python orchestrator → ElevenLabs TTS → Remotion/Kdenlive compositions → rendered video
+**Core architecture:** YAML DSL => Python orchestrator => ElevenLabs TTS => Remotion/Kdenlive compositions => rendered video
+
+> vvv is a deterministic script-to-video tool and backend-agnostic: YAML DSL -> vvv (acquisition, ElevenLabs TTS, stems, timing) => **pluggable assembler** => editor project / rendered video. Assemblers today: Kdenlive via KdenCLI (working). Current focus: a HyperFrames (HTML/CSS => MP4) assembler, which takes the place Remotion had in this doc. When targeting HyperFrames, vvv compiles the deterministic 90% (zero tokens), HyperFrames does timeline/effects/render, and an agent only touches `e:` blocks one chunk at a time. Status: V1 proven on Kdenlive (158 nodes, ~1 hr). Plan: `TODO.md` Phase 1–5.
 
 ---
 
@@ -37,7 +39,7 @@ s:
 
   - t: "CHAPTER 2" 3s {title_card}
 
-  # Natural language edit block — describe the edit in natural language, LLM interprets and turns into Remotion code
+  # Natural language edit block - describe the edit in natural language, LLM interprets and turns into Remotion code
   - n: He grew up surrounded by concrete and noise.
   - e: >
       slow pan across a grainy photo of a neighborhood.
@@ -59,7 +61,7 @@ s:
 
   - n: Three different sources. All saying the same thing.
   - e: >
-      split screen — three panels left to right, staggered 0.3s, the one on the left comes from the bottom, the one on the right comes from the top.
+      split screen - three panels left to right, staggered 0.3s, the one on the left comes from the bottom, the one on the right comes from the top.
       clean white dividers.
     +:
       - source1.png
@@ -75,7 +77,7 @@ s:
 | `n:` | `narrate:` | Narration text. |
 | `v:` | `clip:` | Video. Timestamps in `[from-to]`. |
 | `i:` | `image:` | `->` for transitions between images. `{effect}` for transition type. |
-| `e:` | `edit:` | Natural language block. LLM interprets and generates Remotion code. |
+| `e:` | `edit:` | Natural language block. LLM interprets and generates Remotion code. (HyperFrames: a sub-composition.) |
 | `t:` | `text_overlay:` | Text, duration, optional `{style}`. |
 | `_:` | `pause:` | Seconds of silence. |
 | `+:` | `media:` | Asset path(s) attached to an `e:` block. Timestamps in `[from-to]`. |
@@ -146,7 +148,7 @@ script:
 
   - narrate: "Three different sources. All saying the same thing."
   - edit: >
-      split screen — three panels left to right, staggered 0.3s.
+      split screen - three panels left to right, staggered 0.3s.
       clean white dividers.
     media:
       - assets/source1.png
@@ -156,13 +158,15 @@ script:
 
 ---
 
-## Version 1 — Generate & Assemble (MVP)
+## Version 1 - Generate & Assemble (MVP)
 
 **What it does:** Parses YAML, generates all narration, generates subtitle files, generates custom edits made with Remotion, writes a Kdenlive project file with everything loaded on tracks. You arrange manually.
 
 **What it solves:** Eliminates the TTS generation grind and the blank-timeline-start problem. You open Kdenlive and everything is there waiting to be arranged.
 
-**EXPERIMENTAL:** You can also generate/describe Kdenlive effects.
+**Status:** ✅ Done on the Kdenlive target (acquisition from local/URL/YouTube, per-line voice override, stems). Subtitles not generated yet. Not yet ported to HyperFrames.
+
+**EXPERIMENTAL:** You can also generate/describe Kdenlive effects(as kdencli supports(untested) kdenlive effects).
 
 ### Pipeline
 
@@ -190,7 +194,7 @@ script.yaml
                              place audio sequentially on track 1
                              place subtitles on track 2
                              place media references on track 3
-                             (unsynced — just loaded in order)
+                             (unsynced - just loaded in order)
     │
     ▼
 [5] Open in Kdenlive ─── arrange media to match narration
@@ -199,41 +203,62 @@ script.yaml
                           export
 ```
 
+**With the HyperFrames target, steps [4]–[5] become:**
+```
+[4] Assemble (target from config: kdenlive | hyperframes | any plugin)
+    hyperframes: emit index.html root composition
+                 one sub-composition per chapter
+                 <audio>/<video>/<img>/titles with data-start / data-duration /
+                 data-track-index computed by vvv (absolute, frame-quantized)
+                 clips keep their own audio (no A/V split)
+                 `hyperframes lint` before handing off
+[5] Open in HyperFrames Studio / preview ─── arrange, tweak, render
+```
+
 ### Key notes
 - **ElevenLabs char limit:** Split narration at YAML entry boundaries. If a single narration entry exceeds char_lim (by default 5000), split at sentence boundaries.
 
 ### Kdenlive integration: two approaches
 
-**Option A — OpenTimelineIO (OTIO)**
+**Option A - OpenTimelineIO (OTIO)**
 - Python API for building timelines: `Track`, `Clip`, `Transition` objects instead of raw XML.
 - `pip install opentimelineio` + the Kdenlive adapter (`pip install otio-kdenlive-adapter`).
-- Cleaner code — no manual producer ID management or XML nesting.
+- Cleaner code - no manual producer ID management or XML nesting.
 - Future-proofs the project: OTIO also exports to DaVinci Resolve, Final Cut Pro XML, AAF, EDL, etc. Swap editors without rewriting timeline generation.
-- **Caveat:** The Kdenlive adapter is noted as unstable and lagging behind Kdenlive's newer features. For basic clip/audio placement this is fine. For Kdenlive-specific filter chains, it won't help — but that's what Remotion handles anyway.
+- **Caveat:** The Kdenlive adapter is noted as unstable and lagging behind Kdenlive's newer features. For basic clip/audio placement this is fine. For Kdenlive-specific filter chains, it won't help - but that's what Remotion handles anyway.
 - **Caveat:** OTIO handles cut structure (placement, ordering, durations, basic transitions), not effects. Complex effects stay in the Remotion layer.
 
-**Option B — Raw MLT XML**
+**Option B - Raw MLT XML**
 - Direct control over everything Kdenlive supports, including all effects and filter chains.
-- MLT XML structure: Producers (media files) → Playlists (tracks) → Tractor (multitrack composition). Clips have `in`/`out` in frame numbers = timestamp × fps.
-- More brittle — IDs must be internally consistent, schema can shift between Kdenlive versions. Silent failures when something is off.
+- MLT XML structure: Producers (media files) => Playlists (tracks) => Tractor (multitrack composition). Clips have `in`/`out` in frame numbers = timestamp × fps.
+- More brittle - IDs must be internally consistent, schema can shift between Kdenlive versions. Silent failures when something is off.
 - Best approach: export a test project from Kdenlive manually and use that XML as your structural template.
 - Better for the experimental Kdenlive effects generation path where the LLM writes filter/transition nodes directly.
 
+**Chosen:** Option B, raw MLT XML via KdenCLI. Confirmed brittle the hard way (unique kdenlive:id across ALL top-level elements, stale template transitions, tracksCount) - all fixed. OTIO parked indefinitely.
+
+**HyperFrames target notes**
+- vvv emits HTML from templates; it doesn't drive `@hyperframes/sdk` for generation.
+- Round-trip contract: vvv owns the root composition and regenerates it freely; agent work lives in sub-compositions vvv references but never writes; Studio/hand tweaks persist as Embedded Override deltas. Deterministic (content-hash) element IDs keep references and overrides stable.
+- Costs: Node 22+; render ~1–2.5* realtime (1–2.5+ h for an hour) => chunk by chapter; offline viability must be verified (Studio desktop app wants a HeyGen sign-in).
+
 ---
 
-## Version 2 — Automated Sync via ElevenLabs Timestamps
+## Version 2 - Automated Sync via ElevenLabs Timestamps
 
 **What it adds:** Uses ElevenLabs' `/stream/with-timestamps` endpoint to get character-level timing data. Media cues from the YAML are synced to specific words/phrases in the narration automatically.
 
 **What it solves:** Eliminates manual arrangement. The rough cut is already synced when you open it.
+
+**Status:** Not started (sync phase is a stub). Much easier with HyperFrames: `on_word` = a tween at time t, captions = generated elements (using canonical text from the pronunciation layer, not TTS spelling). Cache alignment JSON next to each narration mp3.
 
 ### New in the pipeline
 
 ```
 [2] changes to:
     ElevenLabs /stream/with-timestamps
-        → audio chunks (base64 assembled)
-        → character-level timing map
+        => audio chunks (base64 assembled)
+        => character-level timing map
 
 [new step] Build sync map:
     for each media entry in YAML:
@@ -251,7 +276,7 @@ script.yaml
 
 ---
 
-## Version 3 — LLM-Generated Remotion/Kdenlive Compositions
+## Version 3 - LLM-Generated Remotion/Kdenlive Compositions
 
 **What it adds:** Effect/transition descriptions from YAML are sent to an LLM (Claude API) which generates Remotion component code. Those render as video clips that get placed on the timeline.
 
@@ -277,9 +302,23 @@ script.yaml
 - **LLM reliability:** Generated Remotion code might sometimes break. Keep a cache of known-good compositions for common effects (carpet transition, glitch, fade, etc.) and only hit the LLM for novel descriptions.
 - **Effect library over time:** As you accumulate working compositions, you build a personal library. The LLM becomes a fallback for new effects, not the primary path.
 
+**Same idea, HyperFrames instead of Remotion:**
+```
+[new step] For each `e:` block / unknown {preset}:
+    key = hash(description + media + range + duration)
+    if accepted edit cached under key: reference it, done
+    else:
+        prompt: description, media, duration, neighbouring narration, house style
+        agent writes edits/<id>.html (sub-composition)
+        `hyperframes lint`, preview the chunk, accept => cache under key
+[4] root composition references edits/<id>.html - vvv never writes into it
+```
+- Token budget: the agent sees one chunk, never the full hour.
+- First preset family: big-head South Park edits (remove-background cutout + scale + shake, parameterised).
+
 ---
 
-## Version 4 — MPV Interactive Preview & Re-prompting
+## Version 4 - MPV Interactive Preview & Re-prompting
 
 **What it adds:** Forks an MPV player via JSON IPC. Plays the rough cut, pauses at cue points (especially blank spaces), lets you re-prompt/re-write effects or fill in gaps interactively from the terminal.
 
@@ -318,6 +357,56 @@ Python orchestrator
     └── on completion: write final .kdenlive / render via Remotion
 ```
 
+For the HyperFrames target this is largely covered by HyperFrames preview + Studio (timeline move/trim/split, agent editing via the SDK; edits persist as Embedded Override deltas). 
+
+---
+
+## Version 5 - New Media Sources & Gap-Fill
+
+**What it adds:** Gen AI backends beyond ElevenLabs (image, video, diagram, speech) plugged in as ordinary backends/directives, programmatic visual descriptions directly in the script, plus a `vvv fill` mode that proposes generations for the blank spaces left after V2 sync.
+
+**What it solves:** The blank-spaces problem again, without handing the thinking to the machine. You write the script, AI only proposes b-roll for gaps, and every proposal lands in the script where you can edit or veto them. Middle ground between creativity/agency and productivity.
+
+### New in the pipeline
+
+```
+No new "generator" layer: everything that produces media already is one
+(yt-dlp, ElevenLabs, x-minus, titles). New sources are just more
+backends/directives in the existing directive => Producer => backend pattern.
+
+[any nondeterministic producer]
+    key = hash(prompt/spec + seed + backend + model version + params)
+    if pinned in vvv.lock: reuse file, done
+    else: generate => accept => pin in vvv.lock
+
+[e: edits/animations]
+    routed:    via: <backend> => straight to a specific model/tool (default)
+    delegated: agent gets the available backends as tools, can combine them (opt-in)
+
+[new command] vvv fill script.yaml        (needs V2 word timestamps)
+    for each narration span with no visual:
+        plan a shot spec from the synced narration (cheap text-only LLM, can be local)
+        write proposed entries (normal directives) INTO the script (or a sidecar YAML)
+    => you review / edit / delete => vvv build as normal
+```
+
+```yaml
+# candidate shapes only, not decided
+- i: { prompt: "...", via: qwen-image, seed: 42 }   # image from a prompt
+- diagram: { via: archify, spec: {...} }            # programmatic, zero tokens
+- e: "big head shake on the punchline"
+  via: agent                                        # delegated, opt-in
+```
+
+### Notes
+- **Determinism comes from the cache, not the model.** APIs never reproduce (ElevenLabs included); local models only with a fixed seed. The lock file is what keeps vvv deterministic.
+- **What's actually new:** pinning + a human accept step for nondeterministic outputs, and HTML sub-compositions as a media kind (HyperFrames places them natively; kdencli needs them pre-rendered to mp4).
+- **LLM ladder:** hand-written spec => template + your values => LLM fills a small spec => agent free-form. Only climb as far as needed.
+- **Skills are mostly a renderer with instructions on top.** archify (typed JSON IR + Node CLI), diagram-design (HTML/SVG templates, Mermaid import), anatomy (JS/SVG/WebGL kit). vvv can call the renderers directly and skip the token burn. All output HTML, so they drop into HyperFrames as sub-compositions.
+- **Offline rule:** render + cache must work offline; generation may need the network, same as acquisition.
+- **Presets before skills:** accepted edits saved with parameters cost zero tokens. A skill only for "make a new one in this style", after 3+ similar accepted edits.
+- **Keep fills obviously graphic** (diagrams, typography, textures, big-head edits). Real people stay real footage; YouTube requires disclosure for realistic synthetic content.
+
 ---
 
 ## Dependencies
@@ -327,21 +416,26 @@ Python orchestrator
 - elevenlabs
 - requests
 - anthropic
-- opentimelineio (+ otio-kdenlive-adapter)
-- (?) lxml (only if using raw MLT XML path)
+- jinja2 (for Hyperframes target)
+- demucs (public stem backend)
+- gen AI backends as needed (diffusers / API SDKs), optional
 
 ### Software
 - Kdenlive
 - MPV
 - FFmpeg / FFprobe
+- librubberband
+- yt-dlp + Deno 
 
 ### Webshit
 - Remotion
 - Node.js
+- Hyperframes CLI 
 
 ---
 
 ## Tentative Future Features
 
 - **Visual reference for effects:** Use a video/clip example as inspiration for the effect you want to generate, instead of just natural language description.
-- **Dynamic media integration:** Pull media from URLs (YouTube, SoundCloud, etc.) instead of relying on raw files from hard drive.
+- **Pronunciation layer:** canonical text vs TTS spelling, applied only at the TTS step. Required before captions.
+- **Distributed render** (HF Lambda / Cloud Run) - only if local chapter renders are too slow. Conflicts with offline-first, so last resort.
