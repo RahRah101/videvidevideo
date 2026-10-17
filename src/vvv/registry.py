@@ -24,7 +24,9 @@ SOURCE_HANDLERS: list[SourceHandler] = []
 DIRECTIVES: dict[str, Directive] = {}
 
 def register_source(h: SourceHandler) -> None:
+    # kept sorted by priority so load order (entry points) doesn't decide who wins
     SOURCE_HANDLERS.append(h)
+    SOURCE_HANDLERS.sort(key=lambda s: s.priority)
 
 def register_directive(d: Directive) -> Directive:
     for alias in d.aliases:

@@ -18,6 +18,10 @@ class SourceInfo:
     meta: dict = field(default_factory=dict)
     
 class SourceHandler(ABC):
+    # resolve_media asks handlers in ascending priority; the first that handles() wins.
+    # Catch-alls (e.g. every URL -> yt-dlp) use a high number so specific handlers go first.
+    priority: ClassVar[int] = 50
+
     @abstractmethod
     def handles(self, source: str) -> bool: 
         ...

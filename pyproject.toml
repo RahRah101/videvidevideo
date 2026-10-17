@@ -14,9 +14,14 @@ dependencies = [
 [project.scripts]
 vvv = "vvv.cli:main"
 
-[build-system]
-requires = ["setuptools>=68.0"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-where = ["src"]
+# Plugins: importing the package registers its directives / producers / sources / assemblers.
+# Third-party plugins declare the same group in their own package. Rerun `pip install -e .` after edits.
+[project.entry-points."vvv.plugins"]
+pause = "vvv.plugins.producers.pause"
+narrate = "vvv.plugins.producers.elevenlabs_narrate"
+clip = "vvv.plugins.producers.clip"
+title = "vvv.plugins.producers.title"
+stem = "vvv.plugins.producers.stems"
+image_url = "vvv.plugins.sources.image_url"
+ytdlp = "vvv.plugins.sources.ytdlp"
+kdencli = "vvv.plugins.assemblers.kdencli"

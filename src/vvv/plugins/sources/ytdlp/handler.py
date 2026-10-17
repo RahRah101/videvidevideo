@@ -27,10 +27,11 @@ def _is_youtube(source: str) -> bool:
 class YtDlpHandler(SourceHandler):
     """Any http(s) URL yt-dlp can fetch (YouTube, Instagram, ...).
 
-    Catch-all for URLs: must be registered AFTER more specific URL handlers
-    (image_url), see plugins/sources/__init__.py.
+    Catch-all for URLs: high priority number, so more specific URL handlers (image_url) go first.
     YouTube-only extras: <id> cache pre-check (in download_video_media) and ?t= start_hint.
     """
+    priority = 100
+
     def handles(self, source: str) -> bool:
         return is_url(source)
 

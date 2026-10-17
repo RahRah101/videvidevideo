@@ -37,7 +37,7 @@ class ParsedScript:
 
 def parse(raw: dict) -> ParsedScript:
     if not DIRECTIVES:
-        raise RuntimeError("no directives registered - import vvv.plugins before parsing")
+        raise RuntimeError("no directives registered - call vvv.plugin_loader.load_plugins() before parsing")
     raw = raw or {}
     errors: list[str] = []
     warnings: list[str] = []

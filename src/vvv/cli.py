@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-import vvv.plugins
+from vvv.plugin_loader import load_plugins
 from vvv.util import text
 
 
@@ -22,6 +22,8 @@ def main() -> int:
     if args.version:
         print("vvv 0.0.1")
         return 0
+
+    load_plugins()
 
     if args.list_producers:
         from vvv.registry import PRODUCERS
