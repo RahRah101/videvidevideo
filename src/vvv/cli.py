@@ -16,7 +16,7 @@ def main() -> int:
     p.add_argument("--list-producers", action="store_true")
     p.add_argument("--work-dir", type=Path, default=Path("build"))
     p.add_argument("--output", type=Path, default=None,
-                   help="output .kdenlive path (default: build/<slug>.kdenlive)")
+                   help="output path (default: build/<slug>.kdenlive) assuming kdencli assembler")
     args = p.parse_args()
 
     if args.version:
