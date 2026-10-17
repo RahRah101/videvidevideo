@@ -119,7 +119,7 @@ def has_audio_stream(filepath: str | Path) -> bool:
 
 def has_video_stream(filepath: str | Path) -> bool:
     result = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "v",
+        [FFPROBE, "-v", "error", "-select_streams", "v",
          "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(filepath)],
         capture_output=True, text=True,
     )
@@ -129,7 +129,9 @@ def concat(parts: list[Path], output: Path) -> Path:
     listfile = output.with_suffix(".txt")
     with open(listfile, "w") as f:
         for part in parts:
-            f.write(f"file '{Path(part).resolve()}'\n")
+            # concat demuxer quoting: a ' inside '...' is written as '\''
+            escaped = str(Path(part).resolve()).replace("'", "'\\''")
+            f.write(f"file '{escaped}'\n")
     result = subprocess.run(
         [FFMPEG, "-f", "concat", "-safe", "0", "-i", str(listfile), "-c", "copy", "-y", str(output)],
         capture_output=True, text=True
@@ -176,7 +178,7 @@ def trim(media, from_s, to_s, output_dir):
         print(f"[trim] skip exists: {out}")
         return out
 
-    cmd = ["ffmpeg", "-y", "-i", str(media_path)]
+    cmd = [FFMPEG, "-y", "-i", str(media_path)]
     if from_s is not None:
         cmd += ["-ss", str(from_s)]
     if to_s is not None:

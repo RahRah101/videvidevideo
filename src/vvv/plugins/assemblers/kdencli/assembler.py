@@ -29,13 +29,14 @@ def _kdencli(*args):
     return result.stdout
 
 def _kdencli_ts(seconds: float) -> str:
-       """Format float seconds as M:SS or H:MM:SS for kdencli."""
-       total = int(round(seconds))
-       h, rem = divmod(total, 3600)
-       m, s = divmod(rem, 60)
+       """Format float seconds as M:SS.mmm or H:MM:SS.mmm for kdencli (TimeUtil::parseTimestamp reads the fraction)."""
+       total_ms = int(round(seconds * 1000))
+       h, rem = divmod(total_ms, 3_600_000)
+       m, ms = divmod(rem, 60_000)
+       s = ms / 1000
        if h:
-           return f"{h}:{m:02d}:{s:02d}"
-       return f"{m}:{s:02d}"
+           return f"{h}:{m:02d}:{s:06.3f}"
+       return f"{m}:{s:06.3f}"
 
 @register_assembler("kdencli")
 class KdencliAssembler(Assembler):
