@@ -18,6 +18,8 @@ YTDLP = "yt-dlp"
 FFPROBE = "ffprobe"
 FFMPEG = "ffmpeg"
 
+_YTDLP_PARTIAL_SUFFIXES = {".part", ".ytdl", ".temp"}
+
 def probe_duration(filepath):
     result = subprocess.run(
         [FFPROBE, "-v", "quiet", "-print_format", "json",
@@ -44,12 +46,16 @@ def _extract_youtube_id(url):
 def download_video_media(url, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     
-    vid = _extract_video_id(url)
+    vid = _extract_youtube_id(url)
     if vid:
-        existing = glob.glob(f"{output_dir}/{vid}.*")
+        # This is dirty but this is to cache and avoid calling yt-dlp when something is already there.
+        # Only exact "<id>.<ext>" counts: interrupted downloads leave ID.mkv.part / ID.f137.mp4 / ID.mp4.ytdl
+        existing = sorted(
+            p for p in Path(output_dir).glob(f"{vid}.*")
+            if p.stem == vid and p.suffix not in _YTDLP_PARTIAL_SUFFIXES
+        )
         if existing:
-            # This is dirty but this is to cache and avoid calling yt-dlp when something is already there
-            return existing[0] 
+            return str(existing[0])
 
     ytcmd = [
         YTDLP,

@@ -6,7 +6,7 @@ from pathlib import Path
 from vvv.registry import register_source
 from vvv.interfaces.source import SourceHandler, SourceInfo
 from vvv.context import Context
-from vvv.util.media import download_video_media
+from vvv.util.media import download_video_media, is_url
 
 
 # Youtube h/m/s tokens
@@ -20,13 +20,19 @@ _HMS_TOKEN = re.compile(
 )
 
 
-class YouTubeHandler(SourceHandler):
+def _is_youtube(source: str) -> bool:
+    return "youtube.com" in source or "youtu.be" in source
+
+
+class YtDlpHandler(SourceHandler):
+    """Any http(s) URL yt-dlp can fetch (YouTube, Instagram, ...).
+
+    Catch-all for URLs: must be registered AFTER more specific URL handlers
+    (image_url), see plugins/sources/__init__.py.
+    YouTube-only extras: <id> cache pre-check (in download_video_media) and ?t= start_hint.
+    """
     def handles(self, source: str) -> bool:
-        return (
-        "youtube.com" in source
-        or "youtu.be" in source
-        or "instagram" in source
-        )
+        return is_url(source)
 
     def resolve(self, source: str, ctx: Context) -> SourceInfo:
         download_dir = ctx.work_dir / "media"
@@ -40,10 +46,8 @@ class YouTubeHandler(SourceHandler):
         # It's "cleaner" to download the whole thing and then trim it. 
         # But also more wasteful. 
         path = download_video_media(source, download_dir)
-        return SourceInfo(
-            path=Path(path),
-            meta={"start_hint": self._start_hint(source)},
-        )
+        meta = {"start_hint": self._start_hint(source)} if _is_youtube(source) else {}
+        return SourceInfo(path=Path(path), meta=meta)
 
     def _start_hint(self, url: str) -> float | None:
         params = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
@@ -65,4 +69,4 @@ def _parse_time_token(token: str) -> float:
 
     raise ValueError(f"unparseable time token: {token!r}")
 
-register_source(YouTubeHandler())
+register_source(YtDlpHandler())
