@@ -1,49 +1,48 @@
-"""Wires concrete producers, sync provider, and assembler into the pipeline."""
+"""Builds one run's producers, sync provider and assembler from the registries + the script's config.
+
+Imports no concrete plugin: plugins register themselves (vvv.plugin_loader), and each class
+builds itself from config (`build(config)`), picking its own backends. Producers are built
+fresh per run, and only for node types the script actually uses.
+"""
 from __future__ import annotations
 
-from vvv.plugins.producers.elevenlabs_narrate.node import NarrateNode
-from vvv.plugins.producers.clip.node import ClipNode
-from vvv.plugins.producers.pause.node import PauseNode
-from vvv.plugins.producers.stems.node import StemNode
-from vvv.plugins.producers.title.node import TitleNode
+from vvv.config import Config
 from vvv.interfaces.producer import Producer
 from vvv.interfaces.sync import SyncProvider
 from vvv.interfaces.assembler import Assembler
-from vvv.config import Config
+from vvv.registry import PRODUCERS, ASSEMBLERS, SYNC_PROVIDERS
+import vvv.phases.sync  # registers the core "sequential" sync provider
 
-from vvv.plugins.producers.pause.producer import PauseProducer
-from vvv.plugins.producers.elevenlabs_narrate.producer import NarrateProducer
-from vvv.plugins.producers.elevenlabs_narrate.elevenlabs_impl import ElevenLabsTTS
-#from vvv.plugins.producers.elevenlabs_narrate.mock_tts import MockTTS
-from vvv.plugins.producers.clip.producer import ClipProducer
-from vvv.plugins.assemblers.kdencli.assembler import KdencliAssembler
-from vvv.phases.sync import SequentialSync
-
-from vvv.plugins.producers.stems.stem_backend import get_backend
-from vvv.plugins.producers.stems import StemProducer
-import os
-
-from vvv.plugins.producers.title.producer import TitleProducer
-
-def build_producers(config: Config | None = None) -> dict[type, Producer]:
-    # Components read their own config section (from_config); this file never learns their keys.
-    # TODO: Replace with config file later... (stem backend still env-var)
-    config = config or Config()
-    stem_backend = get_backend(os.environ.get("VVV_STEM_BACKEND", "demucs"))
-    return {
-        PauseNode: PauseProducer(),
-        # TODO: Config config config. For now we forcing eleven labs because we trying to test a working product
-        # but this should be configurable
-        NarrateNode: NarrateProducer.from_config(config, tts=ElevenLabsTTS.from_config(config)),
-        ClipNode: ClipProducer(),
-        StemNode:    StemProducer(stem_backend),
-        TitleNode: TitleProducer(),
-    }
+ASSEMBLE_SECTION = "assemble"      # core-owned: `assemble: { target: <name> }`
+DEFAULT_TARGET = "kdencli"
+DEFAULT_SYNC = "sequential"
 
 
-def build_sync() -> SyncProvider:
-    return SequentialSync()
+def build_producers(config: Config, needed: set[type]) -> dict[type, Producer]:
+    missing = sorted(t.__name__ for t in needed if t not in PRODUCERS)
+    if missing:
+        raise ValueError(f"no producer registered for {missing} (is its plugin installed?)")
+    return {t: PRODUCERS[t].build(config) for t in needed}
 
 
-def build_assembler() -> Assembler:
-    return KdencliAssembler()
+def assembler_target(config: Config, override: str | None = None) -> str:
+    section = config.section(ASSEMBLE_SECTION, {"target"})
+    return override or str(section.get("target", DEFAULT_TARGET))
+
+
+def build_assembler(config: Config, target: str) -> Assembler:
+    if target not in ASSEMBLERS:
+        raise ValueError(f"unknown assembler target {target!r}. available: {sorted(ASSEMBLERS)}")
+    return ASSEMBLERS[target].build(config)
+
+
+def build_sync(config: Config) -> SyncProvider:
+    return SYNC_PROVIDERS[DEFAULT_SYNC]()
+
+
+def known_config_sections() -> set[str]:
+    """Every section an installed component may read (metadata only, nothing gets built)."""
+    known = {ASSEMBLE_SECTION}
+    for cls in [*PRODUCERS.values(), *ASSEMBLERS.values()]:
+        known |= cls.config_sections()
+    return known

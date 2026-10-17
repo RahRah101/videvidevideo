@@ -41,6 +41,7 @@ def _kdencli_ts(seconds: float) -> str:
 
 @register_assembler("kdencli")
 class KdencliAssembler(Assembler):
+    output_suffix = ".kdenlive"
     VIDEO_TRACK = "0"
     TTS_TRACK = "1"
     AUDIO_TRACK = "2"

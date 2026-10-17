@@ -1,15 +1,21 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
-import importlib.metadata
+
+from vvv.plugin_loader import backend_names, load_backend
 
 
 class StemSeparator(ABC):
     """Swappable backend that splits an audio file into stems.
 
     Peer of TTSBackend. StemProducer depends on THIS, never on a concrete
-    backend, so the choice of backend is a composition decision.
+    backend, so the choice of backend is a config decision (`config: stem: backend:`).
     """
+
+    @classmethod
+    def from_config(cls, config) -> "StemSeparator":
+        """Build from the script's Config; a backend's section is named after its entry point."""
+        return cls()
 
     @abstractmethod
     def separate(self, audio: Path, stems: list[str], output_dir: Path) -> dict[str, Path]:
@@ -20,28 +26,13 @@ class StemSeparator(ABC):
         ...
 
 
-# Generic backend discovery
-_ENTRY_POINT_GROUP = "vvv.stem_backends"
+# Generic backend discovery: every backend (demucs included) is an entry point in this group.
+ENTRY_POINT_GROUP = "vvv.stem_backends"
 
 
-def available_backends() -> dict[str, type[StemSeparator]]:
-    from .demucs_backend import LocalDemucs
-    backends: dict[str, type[StemSeparator]] = {"demucs": LocalDemucs}
-
-    try:
-        eps = importlib.metadata.entry_points(group=_ENTRY_POINT_GROUP)
-    except TypeError:  # Python <3.10 entry_points() API
-        eps = importlib.metadata.entry_points().get(_ENTRY_POINT_GROUP, [])
-
-    for ep in eps:
-        backends[ep.name] = ep.load()
-    return backends
+def available_backends() -> list[str]:
+    return backend_names(ENTRY_POINT_GROUP)
 
 
-def get_backend(name: str) -> StemSeparator:
-    backends = available_backends()
-    if name not in backends:
-        raise ValueError(
-            f"unknown stem backend '{name}'. available: {sorted(backends)}"
-        )
-    return backends[name]()
+def get_backend_class(name: str) -> type[StemSeparator]:
+    return load_backend(ENTRY_POINT_GROUP, name)

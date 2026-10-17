@@ -8,6 +8,11 @@ class TTSBackend(ABC):
         """Write audio of `text` to `output`. Return the written path."""
         ...
 
+    @classmethod
+    def from_config(cls, config) -> "TTSBackend":
+        """Build from the script's Config; a backend's section is named after its entry point."""
+        return cls()
+
     def cache_identity(self) -> dict:
         """Everything about this backend that changes the audio (goes into the cache key).
         Override to add model/version/settings."""

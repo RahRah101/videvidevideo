@@ -25,3 +25,17 @@ stem = "vvv.plugins.producers.stems"
 image_url = "vvv.plugins.sources.image_url"
 ytdlp = "vvv.plugins.sources.ytdlp"
 kdencli = "vvv.plugins.assemblers.kdencli"
+
+# Backends, loaded lazily by name from the script's config (only the selected one is imported).
+[project.entry-points."vvv.tts_backends"]
+elevenlabs = "vvv.plugins.producers.elevenlabs_narrate.elevenlabs_impl:ElevenLabsTTS"
+
+[project.entry-points."vvv.stem_backends"]
+demucs = "vvv.plugins.producers.stems.demucs_backend:LocalDemucs"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -9,7 +9,10 @@ class ElevenLabsTTS(TTSBackend):
     CONFIG_KEYS = {"model_id"}      # API key stays in ELEVENLABS_API_KEY, never in the script
 
     def __init__(self, api_key: str | None = None, model_id: str = "eleven_multilingual_v2"):
-        self.client = ElevenLabs(api_key=api_key or os.environ["ELEVENLABS_API_KEY"])
+        api_key = api_key or os.environ.get("ELEVENLABS_API_KEY")
+        if not api_key:
+            raise ValueError("ELEVENLABS_API_KEY is not set (needed because the script narrates with tts: elevenlabs)")
+        self.client = ElevenLabs(api_key=api_key)
         self.model_id = model_id
 
     @classmethod

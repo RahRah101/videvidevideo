@@ -1,10 +1,10 @@
 """Plugin registry.
 
-Producers/assemblers/sync providers register themselves at import time
-via decorators. SOURCE_HANDLERS (resolve_media) and DIRECTIVES (parse) are used for dispatch.
-PRODUCERS is read by `--list-producers` only; ASSEMBLERS and SYNC_PROVIDERS
-are not read yet. composition.py does the real wiring, because producers
-need injected backends (planned fix: build(config) factories, see TODO.md).
+Plugins register themselves at import time (vvv.plugin_loader imports every
+`vvv.plugins` entry point). DIRECTIVES -> parse, SOURCE_HANDLERS -> resolve_media
+(sorted by priority), PRODUCERS / ASSEMBLERS / SYNC_PROVIDERS -> composition.py,
+which calls each class's build(config). Backends (TTS, stems) are not registered
+here: they are entry-point groups loaded lazily by name (plugin_loader.load_backend).
 """
 from __future__ import annotations
 from typing import Type

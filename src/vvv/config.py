@@ -22,18 +22,18 @@ class Config:
             if not isinstance(body, dict):
                 raise ValueError(f"config.{name}: must be a mapping, got {body!r}")
         self._raw = raw
-        self._used: set[str] = set()
         self.warnings: list[str] = []
 
     def section(self, name: str, keys: set[str]) -> dict[str, Any]:
         """The `name` section (empty if absent). Warns on keys not in `keys`."""
-        self._used.add(name)
         body = dict(self._raw.get(name) or {})
         for key in sorted(set(body) - keys):
             self.warnings.append(f"config.{name}: unknown key {key!r} ignored")
             body.pop(key)
         return body
 
-    def unused_sections(self) -> list[str]:
-        """Call after everything is built: sections nobody read (typos, removed plugins)."""
-        return [f"config: unknown section {name!r} ignored" for name in self._raw if name not in self._used]
+    def unknown_sections(self, known: set[str]) -> list[str]:
+        """Sections no installed component claims (typos, uninstalled plugins).
+        `known` comes from metadata, not from what got built: a script without narration
+        still has a valid `elevenlabs:` section even though nothing reads it this run."""
+        return [f"config: unknown section {name!r} ignored" for name in self._raw if name not in known]

@@ -13,6 +13,7 @@ from .tts_backend import TTSBackend
 from vvv.util.text import split_for_tts
 from vvv.util.media import probe_duration, concat
 from vvv.util.cache import Cache, cache_key
+from vvv.plugin_loader import backend_names, load_backend
 
 # Pre-content-hash cache files: narrate_001.mp3 (keyed on position only)
 _LEGACY_NAME = re.compile(r"narrate_(\d{3})\.mp3")
@@ -22,15 +23,23 @@ _LEGACY_NAME = re.compile(r"narrate_(\d{3})\.mp3")
 class NarrateProducer(Producer):
     node_type = NarrateNode
     CONFIG_SECTION = "narrate"
-    CONFIG_KEYS = {"adopt_legacy"}
+    CONFIG_KEYS = {"tts", "adopt_legacy"}
+    TTS_GROUP = "vvv.tts_backends"      # entry-point group; `tts:` picks one by name
+    DEFAULT_TTS = "elevenlabs"
 
     @classmethod
-    def from_config(cls, config, tts: TTSBackend) -> "NarrateProducer":
+    def build(cls, config) -> "NarrateProducer":
         section = config.section(cls.CONFIG_SECTION, cls.CONFIG_KEYS)
         adopt = section.get("adopt_legacy", False)
         if not isinstance(adopt, bool):
             raise ValueError(f"config.narrate.adopt_legacy: must be true or false, got {adopt!r}")
-        return cls(tts, adopt_legacy=adopt)
+        tts_cls = load_backend(cls.TTS_GROUP, str(section.get("tts", cls.DEFAULT_TTS)))
+        return cls(tts_cls.from_config(config), adopt_legacy=adopt)
+
+    @classmethod
+    def config_sections(cls) -> set[str]:
+        # each TTS backend reads a section named after its entry point (e.g. `elevenlabs:`)
+        return {cls.CONFIG_SECTION, *backend_names(cls.TTS_GROUP)}
 
     def __init__(self, tts: TTSBackend, adopt_legacy: bool = False):
         self.tts = tts
