@@ -1,6 +1,6 @@
 if __name__ == "__main__":
     from pathlib import Path
-    from vvv.ir.nodes import PauseNode
+    from vvv.plugins.producers.pause.node import PauseNode
     from vvv.ir.resolved import ResolvedEntry
     from vvv.context import Context, Meta
     from vvv.phases.sync import SequentialSync

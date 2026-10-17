@@ -4,7 +4,8 @@ from pathlib import Path
 from vvv.registry import register_assembler
 from vvv.interfaces.assembler import Assembler
 from vvv.ir.resolved import ResolvedEntry, TimedEntry
-from vvv.ir.nodes import Node, ClipNode
+from vvv.ir.nodes import Node
+from vvv.plugins.producers.clip.node import ClipNode
 from vvv.context import Context, Meta
 
 

@@ -2,14 +2,16 @@
 from __future__ import annotations
 from pathlib import Path
 
+from vvv.registry import register_producer
 from vvv.interfaces.producer import Producer
-from vvv.ir.nodes import StemNode
+from .node import StemNode
 from vvv.ir.resolved import ResolvedEntry
 from vvv.context import Context
 from vvv.util.media import resolve_media, probe_duration, trim
 from .stem_backend import StemSeparator
 
 
+@register_producer
 class StemProducer(Producer):
     node_type = StemNode
 

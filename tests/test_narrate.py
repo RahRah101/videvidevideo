@@ -1,5 +1,5 @@
 from pathlib import Path
-from vvv.ir.nodes import NarrateNode
+from vvv.plugins.producers.elevenlabs_narrate.node import NarrateNode
 from vvv.context import Context, Meta
 from vvv.plugins.producers.elevenlabs_narrate.producer import NarrateProducer
 from vvv.plugins.producers.elevenlabs_narrate.elevenlabs_impl import ElevenLabsTTS

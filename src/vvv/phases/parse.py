@@ -1,25 +1,12 @@
 from __future__ import annotations
-import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Any
 import os
 
-import yaml
-
-from vvv.ir.nodes import Node, NarrateNode, ClipNode, PauseNode, StemNode, TitleNode, TitleStyle
+from vvv.ir.nodes import Node
 from vvv.context import Meta
+from vvv.registry import DIRECTIVES
 
-
-
-KEYS = {
-    "narrate":  ("n", "narrate"),
-    # Technically, an image is just a clip with a duration
-    "clip":     ("v", "clip", "i", "image"),
-    "pause":    ("_", "pause"),
-    "stem":     ("stem",),
-    "title": ("title", "text"),
-}
 
 META_KEYS = {
     "title":      "title",
@@ -32,31 +19,6 @@ META_KEYS = {
 }
 
 
-_TIMESTAMP_RANGE = re.compile(
-    r"""
-    \s*
-    \[                                      # opening bracket
-    (\d{1,2}(?::\d{2}){1,2})                # group 1: start, M:SS or H:MM:SS
-    -                                       # separator (":")
-    (\d{1,2}(?::\d{2}){1,2})                # group 2: end, same
-    \]                                      # closing bracket
-    $
-    """,
-    re.VERBOSE,
-)
-
-_VOICE_ID = re.compile(
-    r"""
-    \s*
-    \[                                      # opening bracket
-    voice:
-    .*                                      # group 1: voice_id
-    \]                                      # closing bracket
-    $
-    """,
-    re.VERBOSE,
-)
-
 @dataclass(frozen=True, slots=True)
 class ParsedScript:
     meta: Meta
@@ -64,6 +26,8 @@ class ParsedScript:
 
 
 def parse(raw: dict) -> ParsedScript:
+    if not DIRECTIVES:
+        raise RuntimeError("no directives registered - import vvv.plugins before parsing")
     meta = _parse_meta(raw.get("meta", {}))
     nodes: list[Node] = []
     for entry in raw.get(META_KEYS["script"], []):
@@ -82,125 +46,15 @@ def _parse_meta(raw: dict) -> Meta:
     )
 
 
-def _has(entry: dict, directive: str) -> str | None:
-    for k in KEYS[directive]:
-        if k in entry:
-            return k
-    return None
-
-
 def _parse_entry(entry: dict) -> list[Node]:
+    # One entry can yield several nodes, in the order their keys appear in the entry.
+    # Each directive (plugins/producers/*/directive.py) parses its own value + entry-level keys.
     nodes: list[Node] = []
-
-    if k := _has(entry, "narrate"):
-        nodes.append(_parse_narrate(entry[k], entry))
-
-    if k := _has(entry, "clip"):
-        nodes.append(_parse_clip(entry[k], entry, matched_key=k))
-
-    if k := _has(entry, "pause"):
-        nodes.append(PauseNode(duration_s=float(entry[k])))
-
-    if k := _has(entry, "stem"):
-        nodes.append(_parse_stem(entry[k], entry))
-    
-    if k := _has(entry, "title"):
-        nodes.append(_parse_title(entry[k], entry))
-
+    seen = set()
+    for key, value in entry.items():
+        directive = DIRECTIVES.get(key)
+        if directive is None or directive.name in seen:
+            continue
+        seen.add(directive.name)
+        nodes.append(directive.parse(value, entry, key))
     return nodes
-
-def _parse_title(value, entry: dict) -> TitleNode:
-    style = _parse_style(entry.get("style", {}))
-    return TitleNode(
-        text=str(value),
-        anchor=entry.get("anchor", "bottom-center"),
-        margin=int(entry.get("margin", 80)),
-        x=entry.get("x"),
-        y=entry.get("y"),
-        track=entry.get("track"),
-        duration_s=float(entry.get("duration", 5.0)),
-        style=style,
-    )
-
-def _parse_style(raw: dict) -> TitleStyle:
-    return TitleStyle(
-        font=raw.get("font", "Arial"),
-        font_size=int(raw.get("font_size", raw.get("size", 50))),
-        color=raw.get("color", "255,255,255,255"),
-        outline_color=raw.get("outline_color", "0,0,0,255"),
-        outline=str(raw.get("outline", "2")),
-        bold=bool(raw.get("bold", False)),
-        italic=bool(raw.get("italic", False)),
-        underline=bool(raw.get("underline", False)),
-        letter_spacing=int(raw.get("letter_spacing", 0)),
-        line_spacing=int(raw.get("line_spacing", 0)),
-        box_width=int(raw.get("box_width", 0)),
-        box_height=int(raw.get("box_height", 0)),
-        font_file=raw.get("font_file"),
-        shadow=raw.get("shadow"),
-        gradient=raw.get("gradient"),
-    )
-
-    #TODO : Implement image, edit, text_overlay, etc...
-    return nodes
-
-
-def _parse_clip(value: Any, entry: dict, matched_key: str) -> ClipNode:
-    audio = entry.get("audio", True)
-    if matched_key in ("i", "image"):
-        return ClipNode(
-            source=str(value).strip(),
-            duration_s=float(entry["d"]) if "d" in entry else 1.0,
-        )
-    
-    if isinstance(value, str):
-        ts = _TIMESTAMP_RANGE.search(value)
-        if ts:
-            return ClipNode(
-                source=value[:ts.start()].strip(),
-                from_s=_parse_timestamp(ts.group(1)),
-                to_s=_parse_timestamp(ts.group(2)),
-            )
-        return ClipNode(source=value.strip())
-    return ClipNode(
-        source=str(value),
-        from_s=_parse_timestamp(entry["from"]) if "from" in entry else None,
-        to_s=_parse_timestamp(entry["to"]) if "to" in entry else None,
-        keep_audio=audio
-    )
-
-
-def _parse_timestamp(ts: str) -> float:
-    # '1:05' -> 65.0, '1:02:03' -> 3723.0, '12' -> 12.0
-    parts = [int(p) for p in str(ts).strip().split(":")]
-    seconds = 0
-    for p in parts:
-        seconds = seconds * 60 + p
-    return float(seconds)
-
-def _parse_stem(value: Any, entry: dict) -> "StemNode":
-    stems = tuple(entry.get("stems", ["vocals"]))
-
-    if isinstance(value, str):
-        ts = _TIMESTAMP_RANGE.search(value)
-        if ts:
-            return StemNode(
-                source=value[:ts.start()].strip(),
-                stems=stems,
-                from_s=_parse_timestamp(ts.group(1)),
-                to_s=_parse_timestamp(ts.group(2)),
-            )
-        return StemNode(source=value.strip(), stems=stems)
-
-    return StemNode(
-        source=str(value),
-        stems=stems,
-        from_s=_parse_timestamp(entry["from"]) if "from" in entry else None,
-        to_s=_parse_timestamp(entry["to"]) if "to" in entry else None,
-    )
-
-
-def _parse_narrate(value: Any, entry: dict) -> NarrateNode:  
-    text = str(value)
-    voice_id = entry.get("voice")
-    return NarrateNode(text=text, voice=voice_id)

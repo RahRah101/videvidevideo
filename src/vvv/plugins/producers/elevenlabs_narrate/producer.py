@@ -3,7 +3,8 @@ from pathlib import Path
 
 from vvv.registry import register_producer
 from vvv.interfaces.producer import Producer
-from vvv.ir.nodes import Node, NarrateNode
+from vvv.ir.nodes import Node
+from .node import NarrateNode
 from vvv.ir.resolved import ResolvedEntry
 from vvv.context import Context
 from vvv.util.media import probe_duration

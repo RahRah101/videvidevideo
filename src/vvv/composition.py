@@ -1,7 +1,11 @@
 """Wires concrete producers, sync provider, and assembler into the pipeline."""
 from __future__ import annotations
 
-from vvv.ir.nodes import NarrateNode, ClipNode, PauseNode, StemNode, TitleNode
+from vvv.plugins.producers.elevenlabs_narrate.node import NarrateNode
+from vvv.plugins.producers.clip.node import ClipNode
+from vvv.plugins.producers.pause.node import PauseNode
+from vvv.plugins.producers.stems.node import StemNode
+from vvv.plugins.producers.title.node import TitleNode
 from vvv.interfaces.producer import Producer
 from vvv.interfaces.sync import SyncProvider
 from vvv.interfaces.assembler import Assembler
