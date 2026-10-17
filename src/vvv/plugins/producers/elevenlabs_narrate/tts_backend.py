@@ -7,3 +7,8 @@ class TTSBackend(ABC):
     def synthesize(self, text: str, voice_id: str, output: Path) -> Path:
         """Write audio of `text` to `output`. Return the written path."""
         ...
+
+    def cache_identity(self) -> dict:
+        """Everything about this backend that changes the audio (goes into the cache key).
+        Override to add model/version/settings."""
+        return {"backend": type(self).__name__}

@@ -5,9 +5,23 @@ from elevenlabs import ElevenLabs
 from .tts_backend import TTSBackend
 
 class ElevenLabsTTS(TTSBackend):
+    CONFIG_SECTION = "elevenlabs"
+    CONFIG_KEYS = {"model_id"}      # API key stays in ELEVENLABS_API_KEY, never in the script
+
     def __init__(self, api_key: str | None = None, model_id: str = "eleven_multilingual_v2"):
         self.client = ElevenLabs(api_key=api_key or os.environ["ELEVENLABS_API_KEY"])
         self.model_id = model_id
+
+    @classmethod
+    def from_config(cls, config) -> "ElevenLabsTTS":
+        section = config.section(cls.CONFIG_SECTION, cls.CONFIG_KEYS)
+        if "model_id" in section:
+            return cls(model_id=str(section["model_id"]))
+        return cls()
+
+    def cache_identity(self) -> dict:
+        # switching models changes the audio
+        return {"backend": "elevenlabs", "model_id": self.model_id}
 
     def synthesize(self, text: str, voice_id: str, output: Path) -> Path:
         # TODO: Remember in the future for syncing purposes

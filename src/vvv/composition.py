@@ -9,6 +9,7 @@ from vvv.plugins.producers.title.node import TitleNode
 from vvv.interfaces.producer import Producer
 from vvv.interfaces.sync import SyncProvider
 from vvv.interfaces.assembler import Assembler
+from vvv.config import Config
 
 from vvv.plugins.producers.pause.producer import PauseProducer
 from vvv.plugins.producers.elevenlabs_narrate.producer import NarrateProducer
@@ -24,14 +25,16 @@ import os
 
 from vvv.plugins.producers.title.producer import TitleProducer
 
-def build_producers() -> dict[type, Producer]:
-    # TODO: Replace with config file later...
+def build_producers(config: Config | None = None) -> dict[type, Producer]:
+    # Components read their own config section (from_config); this file never learns their keys.
+    # TODO: Replace with config file later... (stem backend still env-var)
+    config = config or Config()
     stem_backend = get_backend(os.environ.get("VVV_STEM_BACKEND", "demucs"))
     return {
         PauseNode: PauseProducer(),
         # TODO: Config config config. For now we forcing eleven labs because we trying to test a working product
         # but this should be configurable
-        NarrateNode: NarrateProducer(tts=ElevenLabsTTS()),
+        NarrateNode: NarrateProducer.from_config(config, tts=ElevenLabsTTS.from_config(config)),
         ClipNode: ClipProducer(),
         StemNode:    StemProducer(stem_backend),
         TitleNode: TitleProducer(),

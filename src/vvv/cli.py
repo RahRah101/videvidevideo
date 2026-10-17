@@ -56,9 +56,11 @@ def _run(script_path: Path, work_dir: Path, output: Path | None) -> int:
     work_dir.mkdir(parents=True, exist_ok=True)
     ctx = Context(meta=parsed.meta, work_dir=work_dir)
 
-    producers = build_producers()
+    producers = build_producers(parsed.config)
     sync = build_sync()
     assembler = build_assembler()
+    for w in parsed.config.warnings + parsed.config.unused_sections():
+        print(f"[config] warning: {w}", file=sys.stderr)
 
     print(f"[resolve] producing media for {len(parsed.nodes)} nodes...")
     resolved = resolve(parsed.nodes, producers, ctx)

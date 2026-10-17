@@ -11,6 +11,7 @@ from vvv.interfaces.source import SourceHandler
 from vvv.registry import SOURCE_HANDLERS
 from vvv.context import Context
 from vvv.interfaces.source import SourceInfo
+from vvv.util.cache import Cache, cache_key
 
 # Path to external tools
 # TODO: Use config file
@@ -94,20 +95,24 @@ def is_url(path: str) -> bool:
        return bool(re.match(r"https?://", path))
 
 def download_image_media(url: str, output_dir: str) -> str:
-       Path(output_dir).mkdir(parents=True, exist_ok=True)
-       filename = Path(urllib.parse.urlparse(url).path).name or "image"
-       out_path = Path(output_dir) / filename
+       # Keyed on the URL: already-downloaded URLs never hit the network (offline rebuilds),
+       # and two URLs ending in the same basename no longer overwrite each other.
+       name = Path(urllib.parse.urlparse(url).path)
+       stem, suffix = (name.stem or "image"), name.suffix
 
-       # nasty workaround, sometimes without user agent you get 403'd
-       req = urllib.request.Request(
-               url,
-                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) "
-                               "AppleWebKit/537.36 (KHTML, like Gecko) "
-                               "Chrome/120.0 Safari/537.36"},
-        )
-       with urllib.request.urlopen(req) as resp, open(out_path, "wb") as f:
-           f.write(resp.read())
-       return str(out_path)
+       def fetch(tmp: Path):
+           # nasty workaround, sometimes without user agent you get 403'd
+           req = urllib.request.Request(
+                   url,
+                    headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) "
+                                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                   "Chrome/120.0 Safari/537.36"},
+            )
+           with urllib.request.urlopen(req) as resp, open(tmp, "wb") as f:
+               f.write(resp.read())
+
+       out = Cache(Path(output_dir)).get_or_make(cache_key("image_url", url=url), fetch, prefix=stem, suffix=suffix)
+       return str(out)
 
 def has_audio_stream(filepath: str | Path) -> bool:
     result = subprocess.run(
@@ -154,35 +159,24 @@ def resolve_media(source: str, ctx: Context) -> SourceInfo:
         raise FileNotFoundError(f"Media not found: {p}")
     return SourceInfo(path=p.resolve())
 
-def _ts_tag(seconds: float | None, default: str) -> str:
-    if seconds is None:
-        return default
-    ms = int(round(float(seconds) * 1000))
-    return f"{ms}ms"
-
 def trim(media, from_s, to_s, output_dir):
-    from pathlib import Path
-    media_path = Path(media)
+    media_path = Path(media).resolve()
     if from_s is None and to_s is None:
         return media_path
 
-    start_tag = _ts_tag(from_s, "start")
-    end_tag = _ts_tag(to_s, "end")
+    # Keyed on WHICH file (abs path) + its size/mtime (replacing the source invalidates the trim;
+    # hashing the content would be far too slow for multi-GB sources) + the range.
+    st = media_path.stat()
+    key = cache_key("trim", source=str(media_path), size=st.st_size, mtime_ns=st.st_mtime_ns,
+                    from_s=from_s, to_s=to_s)
 
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    out = output_dir / f"{media_path.stem}_seg_{start_tag}_{end_tag}{media_path.suffix}"
-    
-    # Dumb ''''''''''''''''''caching'''''''''''''''
-    if out.exists():
-        print(f"[trim] skip exists: {out}")
-        return out
+    def cut(tmp: Path):
+        cmd = [FFMPEG, "-y", "-i", str(media_path)]
+        if from_s is not None:
+            cmd += ["-ss", str(from_s)]
+        if to_s is not None:
+            cmd += ["-t", str(to_s - (from_s or 0))]
+        cmd += [str(tmp)]
+        subprocess.run(cmd, check=True)
 
-    cmd = [FFMPEG, "-y", "-i", str(media_path)]
-    if from_s is not None:
-        cmd += ["-ss", str(from_s)]
-    if to_s is not None:
-        cmd += ["-t", str(to_s - (from_s or 0))]
-    cmd += [str(out)]
-    subprocess.run(cmd, check=True)
-    return out
+    return Cache(Path(output_dir)).get_or_make(key, cut, prefix=f"{media_path.stem}_seg", suffix=media_path.suffix)

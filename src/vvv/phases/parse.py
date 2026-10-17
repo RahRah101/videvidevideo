@@ -5,6 +5,7 @@ import os
 
 from vvv.ir.nodes import Node
 from vvv.context import Meta
+from vvv.config import Config
 from vvv.registry import DIRECTIVES
 from vvv.util.dsl import pick
 
@@ -31,6 +32,7 @@ class ParsedScript:
     nodes: list[Node]
     # unknown keys / entries without a directive: ignored, but never silently
     warnings: list[str] = field(default_factory=list)
+    config: Config = field(default_factory=Config)
 
 
 def parse(raw: dict) -> ParsedScript:
@@ -41,8 +43,15 @@ def parse(raw: dict) -> ParsedScript:
     warnings: list[str] = []
 
     for key in raw:
-        if key != "meta" and key not in SCRIPT_KEYS:
+        if key not in ("meta", "config") and key not in SCRIPT_KEYS:
             warnings.append(f"top level: unknown key {key!r} ignored")
+
+    # sections are validated by the components that read them, not here
+    config = Config()
+    try:
+        config = Config(raw.get("config"))
+    except ValueError as e:
+        errors.append(str(e))
 
     meta = None
     try:
@@ -69,7 +78,7 @@ def parse(raw: dict) -> ParsedScript:
 
     if errors:
         raise DSLError("\n".join(errors))
-    return ParsedScript(meta=meta, nodes=nodes, warnings=warnings)
+    return ParsedScript(meta=meta, nodes=nodes, warnings=warnings, config=config)
 
 
 def _parse_meta(raw: dict, warnings: list[str]) -> Meta:
