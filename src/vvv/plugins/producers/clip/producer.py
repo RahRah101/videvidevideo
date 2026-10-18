@@ -26,11 +26,21 @@ class ClipProducer(Producer):
         else:
             kind = "video" if has_video else "audio"
 
+        if node.duration_s is not None:
+            duration = node.duration_s
+        else:
+            # the PLAYED length, not the file's: a [0:05-0:12] cut of a 10 min file lasts 7 s
+            start = node.from_s if node.from_s is not None else (info.meta.get("start_hint") or 0.0)
+            end = node.to_s if node.to_s is not None else probe_duration(info.path)
+            duration = end - start
+            if duration <= 0:
+                raise ValueError(f"{node.source}: cut [{start}s-{end}s] is empty (file is {probe_duration(info.path):.2f}s)")
+
         return ResolvedEntry(
             node=node,
             media=info.path,
             kind = kind,
-            duration_s=node.duration_s if node.duration_s is not None else probe_duration(info.path),
+            duration_s=duration,
             extras={
                 "has_audio": node.keep_audio and has_audio_stream(info.path),
                 # everything the source discovered
