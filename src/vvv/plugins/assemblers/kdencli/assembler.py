@@ -56,6 +56,11 @@ class KdencliAssembler(Assembler):
         self._fps = ctx.meta.fps
         self._named_tracks: dict[str, str] = {}   # DSL `track:` name -> kdencli track id, this run only
         self._create_project(output, ctx.meta)
+        # track id -> [type, end_s], kept from kdencli's own output; used to find a free audio track
+        self._tracks: dict[str, list] = {
+            tid: [kind, float(end)]
+            for tid, kind, end in re.findall(r"\[(\d+)\] (video|audio) - ([\d.]+)s", _kdencli("info", str(output)))
+        }
 
         for timed in entries:
             self._place(timed, output)
@@ -73,12 +78,31 @@ class KdencliAssembler(Assembler):
         if name is None:
             return self.AUTO_TRACK
         if name not in self._named_tracks:
-            out = _kdencli("add-track", str(project), "--type", kind)
-            m = re.search(r"Added \w+ track (\d+)", out)
-            if not m:
-                raise RuntimeError(f"kdencli add-track: unexpected output {out!r}")
-            self._named_tracks[name] = m.group(1)
+            self._named_tracks[name] = self._add_track(project, kind)
         return self._named_tracks[name]
+
+    def _add_track(self, project: Path, kind: str) -> str:
+        out = _kdencli("add-track", str(project), "--type", kind)
+        m = re.search(r"Added \w+ track (\d+)", out)
+        if not m:
+            raise RuntimeError(f"kdencli add-track: unexpected output {out!r}")
+        self._tracks[m.group(1)] = [kind, 0.0]
+        return m.group(1)
+
+    def _placed(self, out: str, kind: str, timed) -> None:
+        # "Placed ... on track N -> entry M": remember where that track now ends
+        m = re.search(r"on track (\d+)", out)
+        if not m:
+            raise RuntimeError(f"kdencli: unexpected output {out!r}")
+        end = self._t(timed.start_s + timed.resolved.duration_s)
+        t = self._tracks.setdefault(m.group(1), [kind, 0.0])
+        t[1] = max(t[1], end)
+
+    def _free_audio_track(self, project: Path, at: float) -> str:
+        for tid, (kind, end) in sorted(self._tracks.items(), key=lambda kv: int(kv[0])):
+            if kind == "audio" and end <= self._t(at) + 1e-6:
+                return tid
+        return self._add_track(project, "audio")
 
     def _cut_args(self, entry) -> list[str]:
         node = entry.node
@@ -115,29 +139,34 @@ class KdencliAssembler(Assembler):
             raise RuntimeError(f"unknown kind: {entry.kind}")
 
     # Every kind is placed at sync's start_s (--at). kdencli inserts the blanks before it,
-    # including on the A/V-split audio half, so gaps and pauses land where sync put them.
+    # so gaps and pauses land where sync put them.
     def _place_audio(self, entry, timed, project):
-        _kdencli("place", str(project),
-                 "-t", self.AUTO_TRACK,
-                 "--file", str(entry.media),
-                 "--at", self._secs(timed.start_s),
-                 *self._cut_args(entry))
+        out = _kdencli("place", str(project),
+                       "-t", self.AUTO_TRACK,
+                       "--file", str(entry.media),
+                       "--at", self._secs(timed.start_s),
+                       *self._cut_args(entry))
+        self._placed(out, "audio", timed)
 
     def _place_video(self, entry, timed, project):
-        args = ["place", str(project), "-t", self.AUTO_TRACK,
-                "--file", str(entry.media),
-                "--at", self._secs(timed.start_s),
-                *self._cut_args(entry)]
-        if not entry.extras.get("has_audio", False):
-            args += ["--video-only"]
-        _kdencli(*args)
+        common = ["--file", str(entry.media), "--at", self._secs(timed.start_s), *self._cut_args(entry)]
+        out = _kdencli("place", str(project), "-t", self.AUTO_TRACK, *common, "--video-only")
+        self._placed(out, "video", timed)
+        if entry.extras.get("has_audio", False):
+            # Split A/V ourselves: kdencli's split pairs with the *nearest* audio track even when
+            # it's busy (an `over` clip on top of a clip with sound), and `--audio-only -t -1`
+            # picks a video track for a file that has video. TODO: fix in KdenCLI, then drop this.
+            track = self._free_audio_track(project, timed.start_s)
+            out = _kdencli("place", str(project), "-t", track, *common, "--audio-only")
+            self._placed(out, "audio", timed)
 
     def _place_image(self, entry, timed, project):
-        _kdencli("place", str(project),
-                 "-t", self.AUTO_TRACK,
-                 "--file", str(entry.media),
-                 "--at", self._secs(timed.start_s),
-                 "--length", self._secs(entry.duration_s or 1.0))
+        out = _kdencli("place", str(project),
+                       "-t", self.AUTO_TRACK,
+                       "--file", str(entry.media),
+                       "--at", self._secs(timed.start_s),
+                       "--length", self._secs(entry.duration_s or 1.0))
+        self._placed(out, "video", timed)
 
     def _place_marker(self, timed):
         # No file to place: pauses only move sync's cursor, and the next entry's --at
@@ -159,7 +188,7 @@ class KdencliAssembler(Assembler):
             args += ["--anchor", node.anchor, "--margin", str(node.margin)]
 
         args += self._title_style_args(s)
-        _kdencli(*args)
+        self._placed(_kdencli(*args), "video", timed)
 
     def _title_style_args(self, s):
         args = ["--font", s.font, "--font-size", str(s.font_size),

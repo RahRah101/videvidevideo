@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 
 from vvv.ir.nodes import Node
+from vvv.ir.placement import Placement, PLACEMENT_KEYS
 from vvv.context import Meta
 from vvv.config import Config
 from vvv.registry import DIRECTIVES
@@ -33,6 +34,8 @@ class ParsedScript:
     # unknown keys / entries without a directive: ignored, but never silently
     warnings: list[str] = field(default_factory=list)
     config: Config = field(default_factory=Config)
+    # parallel to nodes: every node from an entry gets that entry's placement
+    placements: list[Placement] = field(default_factory=list)
 
 
 def parse(raw: dict) -> ParsedScript:
@@ -60,6 +63,7 @@ def parse(raw: dict) -> ParsedScript:
         errors.append(f"meta: {e}")
 
     nodes: list[Node] = []
+    placements: list[Placement] = []
     try:
         script = pick(raw, *SCRIPT_KEYS, default=[]) or []
     except ValueError as e:
@@ -70,15 +74,19 @@ def parse(raw: dict) -> ParsedScript:
         where = f"entry {i} ({_label(entry)})"
         try:
             entry_nodes, entry_warnings = _parse_entry(entry)
+            placement = _parse_placement(entry) if entry_nodes else Placement()
+            if placement.over and not nodes and not errors:
+                raise ValueError("`over` on the first entry: nothing to overlay")
         except (ValueError, TypeError) as e:
             errors.append(f"{where}: {e}")
             continue
         nodes.extend(entry_nodes)
+        placements.extend([placement] * len(entry_nodes))
         warnings.extend(f"{where}: {w}" for w in entry_warnings)
 
     if errors:
         raise DSLError("\n".join(errors))
-    return ParsedScript(meta=meta, nodes=nodes, warnings=warnings, config=config)
+    return ParsedScript(meta=meta, nodes=nodes, warnings=warnings, config=config, placements=placements)
 
 
 def _parse_meta(raw: dict, warnings: list[str]) -> Meta:
@@ -123,6 +131,8 @@ def _parse_entry(entry: dict) -> tuple[list[Node], list[str]]:
 
     warnings = []
     for key in others:
+        if key in PLACEMENT_KEYS:
+            continue
         owners = [d.name for _, d in present if key in d.keys]
         if len(owners) > 1:
             raise ValueError(f"{key!r} is ambiguous: read by {' and '.join(owners)} - split them into separate entries")
@@ -131,6 +141,13 @@ def _parse_entry(entry: dict) -> tuple[list[Node], list[str]]:
 
     nodes = [d.parse(entry[key], entry, key) for key, d in present]
     return nodes, warnings
+
+
+def _parse_placement(entry: dict) -> Placement:
+    over = entry.get("over", False)
+    if not isinstance(over, bool):
+        raise ValueError(f"over: expected true or false, got {over!r}")
+    return Placement(over=over)
 
 
 def _label(entry) -> str:

@@ -74,7 +74,7 @@ def _run(script_path: Path, work_dir: Path, output: Path | None, target: str | N
         print(f"[config] warning: {w}", file=sys.stderr)
 
     print(f"[resolve] producing media for {len(parsed.nodes)} nodes...")
-    resolved = resolve(parsed.nodes, producers, ctx)
+    resolved = resolve(parsed.nodes, producers, ctx, parsed.placements)
 
     print(f"[sync] timing {len(resolved)} entries...")
     timed = sync.time(resolved, ctx)

@@ -14,6 +14,7 @@ from vvv.interfaces.assembler import Assembler
 from vvv.interfaces.sync import SyncProvider
 from vvv.interfaces.source import SourceHandler
 from vvv.interfaces.directive import Directive
+from vvv.ir.placement import PLACEMENT_KEYS
 
 
 PRODUCERS: dict[type, Type[Producer]] = {}
@@ -29,6 +30,9 @@ def register_source(h: SourceHandler) -> None:
     SOURCE_HANDLERS.sort(key=lambda s: s.priority)
 
 def register_directive(d: Directive) -> Directive:
+    taken = set(d.keys) & set(PLACEMENT_KEYS)
+    if taken:
+        raise ValueError(f"directive {d.name!r} declares core placement key(s) {sorted(taken)}")
     for alias in d.aliases:
         if alias in DIRECTIVES and DIRECTIVES[alias] is not d:
             raise ValueError(f"directive alias {alias!r} already taken by {DIRECTIVES[alias].name!r}")

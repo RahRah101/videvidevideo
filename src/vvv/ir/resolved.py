@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 from vvv.ir.nodes import Node
+from vvv.ir.placement import Placement
 
 
 MediaKind = Literal["audio", "video", "image", "marker", "title"]
@@ -17,6 +18,8 @@ class ResolvedEntry:
     duration_s: float
     # backend-specific stuff, like say timing data returned by ElevenLabs API
     extras: dict = field(default_factory=dict)
+    # set by resolve() from the entry's core keys; producers leave it alone
+    placement: Placement = field(default_factory=Placement)
 
 @dataclass(frozen=True, slots=True)
 class TimedEntry:
