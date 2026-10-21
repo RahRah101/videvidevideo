@@ -11,6 +11,9 @@ dependencies = [
     "opentimelineio",
 ]
 
+[project.optional-dependencies]
+hyperframes = ["jinja2"]
+
 [project.scripts]
 vvv = "vvv.cli:main"
 
@@ -25,6 +28,7 @@ stem = "vvv.plugins.producers.stems"
 image_url = "vvv.plugins.sources.image_url"
 ytdlp = "vvv.plugins.sources.ytdlp"
 kdencli = "vvv.plugins.assemblers.kdencli"
+hyperframes = "vvv.plugins.assemblers.hyperframes"
 
 # Backends, loaded lazily by name from the script's config (only the selected one is imported).
 [project.entry-points."vvv.tts_backends"]
@@ -39,3 +43,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"vvv.plugins.assemblers.hyperframes" = ["*.j2"]
