@@ -29,6 +29,7 @@ image_url = "vvv.plugins.sources.image_url"
 ytdlp = "vvv.plugins.sources.ytdlp"
 kdencli = "vvv.plugins.assemblers.kdencli"
 hyperframes = "vvv.plugins.assemblers.hyperframes"
+edit = "vvv.plugins.producers.edit"
 
 # Backends, loaded lazily by name from the script's config (only the selected one is imported).
 [project.entry-points."vvv.tts_backends"]
@@ -36,6 +37,13 @@ elevenlabs = "vvv.plugins.producers.elevenlabs_narrate.elevenlabs_impl:ElevenLab
 
 [project.entry-points."vvv.stem_backends"]
 demucs = "vvv.plugins.producers.stems.demucs_backend:LocalDemucs"
+
+# `e:` edits: the LLM that writes the composition, and the renderer that turns it into a clip.
+[project.entry-points."vvv.llm_backends"]
+claude = "vvv.plugins.producers.edit.claude_impl:ClaudeLLM"
+
+[project.entry-points."vvv.edit_renderers"]
+hyperframes = "vvv.plugins.producers.edit.hyperframes_renderer:HyperframesRenderer"
 
 [build-system]
 requires = ["setuptools>=68.0"]
