@@ -5,8 +5,8 @@ work belongs elsewhere (TODO Phase 2). Render/preview is the HyperFrames CLI's j
 """
 from __future__ import annotations
 import os
+import re
 import shutil
-import subprocess
 from pathlib import Path
 
 from vvv.registry import register_assembler
@@ -16,13 +16,13 @@ from vvv.ir.ids import element_ids
 from vvv.plugins.producers.clip.node import ClipNode
 from vvv.context import Context
 from vvv.util.cache import cache_key
+from . import hfcli
 
 
 @register_assembler("hyperframes")
 class HyperframesAssembler(Assembler):
     output_suffix = ".hf"          # a project folder, not a file
-    CONFIG_SECTION = "hyperframes"
-    CONFIG_KEYS = {"cli", "lint"}
+    CONFIG_SECTION = hfcli.CONFIG_SECTION       # shared with the edit renderer (hfcli.py)
 
     def __init__(self, cli: list[str] | None = None, lint: bool = True):
         self.cli = cli
@@ -30,16 +30,8 @@ class HyperframesAssembler(Assembler):
 
     @classmethod
     def build(cls, config) -> "HyperframesAssembler":
-        sec = config.section(cls.CONFIG_SECTION, cls.CONFIG_KEYS)
-        # cli: a path or an argv list, e.g. [~/.local/node22/bin/node, .../bin/hyperframes] when
-        # the default `node` is older than HyperFrames needs. Unset: `hyperframes` on PATH.
-        cli = sec.get("cli")
-        if isinstance(cli, str):
-            cli = [cli]
-        if cli is not None and not (isinstance(cli, list) and all(isinstance(a, str) for a in cli)):
-            raise ValueError(f"hyperframes.cli: expected a path or a list of strings, got {cli!r}")
-        cli = [os.path.expanduser(a) for a in cli] if cli else None
-        return cls(cli=cli, lint=bool(sec.get("lint", True)))
+        sec = hfcli.read_section(config)
+        return cls(cli=hfcli.parse_cli(sec.get("cli")), lint=bool(sec.get("lint", True)))
 
     def assemble(self, entries: list[TimedEntry], ctx: Context, output: Path) -> Path:
         try:
@@ -154,7 +146,10 @@ class HyperframesAssembler(Assembler):
         path = Path(path).resolve()
         st = path.stat()
         key = cache_key("hf-media", path=str(path), size=st.st_size, mtime=st.st_mtime_ns)
-        name = f"{path.stem}_{key}{path.suffix}"
+        # the name ends up in an HTML src: '#', '?', '%' or spaces would be read as URL syntax
+        # (a name starting with '#' resolves to `media/`), so keep only URL-safe characters
+        safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", path.stem).strip("_")[:60] or "media"
+        name = f"{safe_stem}_{key}{path.suffix.lower()}"
         dest = self._out / "media" / name
         if not dest.exists():
             try:
@@ -223,14 +218,12 @@ class HyperframesAssembler(Assembler):
 
     # -- lint -------------------------------------------------------------------
     def _run_lint(self, project: Path) -> None:
-        found = shutil.which("hyperframes")
-        cli = self.cli or ([found] if found else None)
+        cli = hfcli.find_cli(self.cli)
         if cli is None:
             print("[hyperframes] warning: `hyperframes` CLI not found, lint skipped "
                   "(set config: hyperframes: {cli: ...} or lint: false)")
             return
-        result = subprocess.run([*cli, "lint"], cwd=project, capture_output=True, text=True,
-                                env={**os.environ, "NO_COLOR": "1"})
+        result = hfcli.run(cli, ["lint"], project)
         report = (result.stdout + result.stderr).strip()
         if result.returncode != 0:
             raise RuntimeError(f"hyperframes lint failed for {project}:\n{report}")
