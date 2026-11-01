@@ -19,6 +19,8 @@ def main() -> int:
                    help="output path (default: <work-dir>/<slug><assembler's suffix>, e.g. .kdenlive)")
     p.add_argument("--target", default=None,
                    help="assembler to use (overrides `config: assemble: target:`; default kdencli)")
+    p.add_argument("--yes", action="store_true",
+                   help="allow paid calls (LLM, TTS, ...) for uncached entries; without it vvv lists them and stops")
     args = p.parse_args()
 
     if args.version:
@@ -36,12 +38,31 @@ def main() -> int:
     if args.script is None:
         p.error("script path required")
 
-    return _run(args.script, args.work_dir, args.output, args.target)
+    return _run(args.script, args.work_dir, args.output, args.target, args.yes)
 
 
-def _run(script_path: Path, work_dir: Path, output: Path | None, target: str | None = None) -> int:
+def _spend_guard(work: list[str], yes: bool, stage: str) -> bool:
+    """Decide whether this run may make the paid calls listed in `work`. 
+    Returns True to go on, False to stop before spending your money
+    `stage` says which checkpoint is asking ("resolve" or "edits") for the log message."""
+    if not work:
+        return True 
+    if yes:
+        print(f"[spend] {stage}: {len(work)} paid call(s)", file=sys.stderr)
+        return True
+    else:
+        print(f"[spend] rerun with --yes to make the paid calls. Paid calls:", file=sys.stderr)
+        for i in work:
+            print(i, file=sys.stderr)
+        return False
+
+
+
+
+def _run(script_path: Path, work_dir: Path, output: Path | None, target: str | None = None,
+         yes: bool = False) -> int:
     from vvv.phases.parse import parse, DSLError
-    from vvv.phases.resolve import resolve
+    from vvv.phases.resolve import resolve, resolve_timed, timeline_views
     from vvv.context import Context
     from vvv.composition import (build_producers, build_sync, build_assembler,
                                  assembler_target, known_config_sections)
@@ -73,11 +94,28 @@ def _run(script_path: Path, work_dir: Path, output: Path | None, target: str | N
     for w in config.warnings + config.unknown_sections(known_config_sections()):
         print(f"[config] warning: {w}", file=sys.stderr)
 
+    # Checkpoint 1: paid work of ordinary producers (pass 1 spends as it goes).
+    work = [line for n in parsed.nodes
+            if not producers[type(n)].needs_timeline
+            for line in producers[type(n)].paid_work(n, ctx)]
+    if not _spend_guard(work, yes, "resolve"):
+        return 2
+
     print(f"[resolve] producing media for {len(parsed.nodes)} nodes...")
     resolved = resolve(parsed.nodes, producers, ctx, parsed.placements)
 
     print(f"[sync] timing {len(resolved)} entries...")
     timed = sync.time(resolved, ctx)
+
+    # Checkpoint 2: paid work of timeline-aware producers; their views only exist after sync.
+    views = timeline_views(timed, producers, ctx)
+    work = [line for i, view in views.items()
+            for line in producers[type(timed[i].resolved.node)].paid_work(timed[i].resolved.node, ctx, view)]
+    if not _spend_guard(work, yes, "edits"):
+        return 2
+    if views:
+        print(f"[resolve] producing {len(views)} timeline-aware entries...")
+        timed = resolve_timed(timed, producers, ctx)
 
     if output is None:
         slug = text.slugify(parsed.meta.title)
